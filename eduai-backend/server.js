@@ -630,7 +630,29 @@ app.get('/api/teacher/groups/:groupId/export-csv', authenticate, async (req, res
   res.send('\uFEFF' + header + rows);
 });
 
-app.use(express.static(path.join(__dirname, '../eduai-client/dist')));
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../eduai-client/dist/index.html'));
+// =========================================================
+// 7. FRONTEND STATIC SERVE (PRODUCTION / RAILWAY)
+// =========================================================
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const clientDistPath = path.join(__dirname, '../eduai-client/dist');
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(clientDistPath, 'index.html'));
+  });
+} else {
+  app.get('/', (req, res) => {
+    res.json({ status: 'EduAI Backend ishlamoqda!' });
+  });
+}
+
+const PORT = Number(process.env.PORT) || 5000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`EduAI Server 0.0.0.0:${PORT} da ishga tushdi`);
 });
