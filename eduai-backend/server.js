@@ -31,20 +31,20 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // Gemini band bo'lsa qayta urinadi; 45 soniyada javob bo'lmasa to'xtatadi
 async function generateWithRetry(params) {
   const models = [params.model, process.env.GEMINI_FALLBACK_MODEL].filter(Boolean);
-  const waits = [2000, 5000, 10000];
   let lastErr;
   for (const model of models) {
-    for (let i = 0; i < waits.length; i++) {
+    for (let i = 0; i < 2; i++) {
       try {
         return await Promise.race([
           ai.models.generateContent({ ...params, model }),
-          new Promise((_, rej) => setTimeout(() => rej(new Error('vaqt tugadi (timeout)')), 45000))
+          new Promise((_, rej) => setTimeout(() => rej(new Error('vaqt tugadi (timeout)')), 90000))
         ]);
       } catch (err) {
         lastErr = err;
         console.error(`GEMINI XATO (${model}, urinish ${i + 1}):`, err.message);
-        if (!/503|429|UNAVAILABLE|overloaded|high demand|timeout/i.test(String(err.message))) throw err;
-        await sleep(waits[i]);
+        if (/timeout/i.test(String(err.message))) break; // sekin model: keyingisiga o'tamiz
+        if (!/503|429|UNAVAILABLE|overloaded|high demand/i.test(String(err.message))) throw err;
+        await sleep(3000 * (i + 1));
       }
     }
   }
