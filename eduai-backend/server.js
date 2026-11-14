@@ -7,6 +7,9 @@ import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenAI, Type } from '@google/genai';
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 dotenv.config();
 
@@ -627,6 +630,7 @@ app.get('/api/teacher/groups/:groupId/export-csv', authenticate, async (req, res
   res.send('\uFEFF' + header + rows);
 });
 
-app.listen(process.env.PORT || 5000, () => {
-  console.log(`EduAI Server ${process.env.PORT || 5000}-portda ishga tushdi`);
+app.use(express.static(path.join(__dirname, '../eduai-client/dist')));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../eduai-client/dist/index.html'));
 });
