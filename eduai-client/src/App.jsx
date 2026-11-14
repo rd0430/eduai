@@ -4,10 +4,11 @@ import {
   BookOpen, Upload, FileText, CheckCircle2, XCircle, Sparkles,
   Users, Plus, Copy, Check, Clock, Flame, Trophy, Volume2, Square,
   AlertTriangle, Download, LogOut, BarChart3, Send, ShieldAlert,
-  ShieldCheck, KeyRound, Ban, Megaphone, Cpu
+  ShieldCheck, KeyRound, Ban, Megaphone, Cpu, X, Camera, Lock, Menu
 } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api');const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api');
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 function EduAIApp() {
   const [token, setToken] = useState(localStorage.getItem('eduai_token') || '');
@@ -19,12 +20,14 @@ function EduAIApp() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
 
+  // Admin states
   const [adminData, setAdminData] = useState({ teachers: [], stats: {}, activeAnnouncement: null });
   const [newTeacherName, setNewTeacherName] = useState('');
   const [newTeacherSubject, setNewTeacherSubject] = useState('');
   const [generatedTeacherCreds, setGeneratedTeacherCreds] = useState(null);
   const [announcementInput, setAnnouncementInput] = useState('');
 
+  // Student lesson & quiz states
   const [activeNav, setActiveNav] = useState('new');
   const [lessons, setLessons] = useState([]);
   const [currentLesson, setCurrentLesson] = useState(null);
@@ -44,6 +47,7 @@ function EduAIApp() {
   const [weaknessReport, setWeaknessReport] = useState('');
   const [minutesToday, setMinutesToday] = useState(0);
 
+  // Teacher states
   const [groups, setGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [newGroupName, setNewGroupName] = useState('');
@@ -53,6 +57,14 @@ function EduAIApp() {
   const [groupStats, setGroupStats] = useState({ students: [], leaderboard: [], heatmap: [] });
   const [assignTitle, setAssignTitle] = useState('');
   const [assignText, setAssignText] = useState('');
+
+  // Mobile Menu & Profile Modal states
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [oldPasswordInput, setOldPasswordInput] = useState('');
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
 
   const apiFetch = async (endpoint, options = {}) => {
     const headers = { ...(options.headers || {}) };
@@ -93,60 +105,6 @@ function EduAIApp() {
       clearInterval(interval);
     };
   }, [token, user, activeTab, currentLesson, quizSubmitted]);
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-
-const handleAvatarUpload = async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-
-  setIsUploadingAvatar(true);
-  try {
-    const formData = new FormData();
-    formData.append('avatar', file);
-
-    const res = await fetch(`${API_URL}/profile/avatar`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Rasm yuklashda xatolik');
-
-    const updatedUser = { ...user, avatarUrl: data.avatarUrl };
-    setUser(updatedUser);
-    localStorage.setItem('eduai_user', JSON.stringify(updatedUser));
-  } catch (err) {
-    alert(err.message);
-  } finally {
-    setIsUploadingAvatar(false);
-  }
-};
-
-const handleResetStudentPassword = async (studentId, studentName) => {
-  const custom = window.prompt(
-    `${studentName} uchun yangi parol yozing (avtomatik 6 xonali parol uchun bo'sh qoldirib OK bosing):`
-  );
-  if (custom === null) return;
-
-  try {
-    const res = await fetch(`${API_URL}/teacher/students/${studentId}/reset-password`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ customPassword: custom }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Parolni yangilashda xatolik');
-
-    alert(`Yangi parol saqlandi!\nLogin: ${data.username}\nParol: ${data.plainPassword}`);
-    // Guruh ma'lumotlarini qayta yuklash (sizdagi guruh yuklash funksiyasi nomi):
-    if (selectedGroup) loadGroupDashboard(selectedGroup.id);
-  } catch (err) {
-    alert(err.message);
-  }
-};
 
   useEffect(() => {
     if (!token || !user) return;
@@ -163,6 +121,78 @@ const handleResetStudentPassword = async (studentId, studentName) => {
       });
     }
   }, [token, user]);
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      const res = await fetch(`${API_URL}/profile/avatar`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Rasm yuklashda xatolik');
+
+      const updatedUser = { ...user, avatarUrl: data.avatarUrl };
+      setUser(updatedUser);
+      localStorage.setItem('eduai_user', JSON.stringify(updatedUser));
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  const handleChangeOwnPassword = async (e) => {
+    e.preventDefault();
+    if (!newPasswordInput.trim() || newPasswordInput.trim().length < 4) {
+      alert("Yangi parol kamida 4 ta belgidan iborat bo'lishi kerak!");
+      return;
+    }
+    setPasswordChangeLoading(true);
+    try {
+      await apiFetch('/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          oldPassword: oldPasswordInput,
+          newPassword: newPasswordInput.trim()
+        })
+      });
+      alert('Parolingiz muvaffaqiyatli yangilandi!');
+      setOldPasswordInput('');
+      setNewPasswordInput('');
+      setShowProfileModal(false);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setPasswordChangeLoading(false);
+    }
+  };
+
+  const handleResetStudentPassword = async (studentId, studentName) => {
+    const custom = window.prompt(
+      `${studentName} uchun yangi parol yozing (avtomatik 6 xonali parol uchun bo'sh qoldirib OK bosing):`
+    );
+    if (custom === null) return;
+
+    try {
+      const data = await apiFetch(`/teacher/students/${studentId}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({ customPassword: custom }),
+      });
+
+      alert(`Yangi parol saqlandi!\nLogin: ${data.username}\nParol: ${data.plainPassword}`);
+      if (selectedGroup) loadGroupDashboard(selectedGroup);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -203,6 +233,7 @@ const handleResetStudentPassword = async (studentId, studentName) => {
     localStorage.removeItem('eduai_user');
     setToken('');
     setUser(null);
+    setMobileMenuOpen(false);
   };
 
   const copyText = (text, id) => {
@@ -218,21 +249,21 @@ const handleResetStudentPassword = async (studentId, studentName) => {
   };
 
   const handleCreateTeacher = async (e) => {
-  e.preventDefault();
-  if (!newTeacherName.trim()) return;
-  try {
-    const creds = await apiFetch('/admin/teachers', {
-      method: 'POST',
-      body: JSON.stringify({ fullName: newTeacherName, subject: newTeacherSubject })
-    });
-    setGeneratedTeacherCreds(creds);
-    setNewTeacherName('');
-    setNewTeacherSubject('');
-    loadAdminOverview();
-  } catch (err) {
-    alert('Xatolik: ' + err.message);
-  }
-};
+    e.preventDefault();
+    if (!newTeacherName.trim()) return;
+    try {
+      const creds = await apiFetch('/admin/teachers', {
+        method: 'POST',
+        body: JSON.stringify({ fullName: newTeacherName, subject: newTeacherSubject })
+      });
+      setGeneratedTeacherCreds(creds);
+      setNewTeacherName('');
+      setNewTeacherSubject('');
+      loadAdminOverview();
+    } catch (err) {
+      alert('Xatolik: ' + err.message);
+    }
+  };
 
   const handleToggleTeacher = async (teacherId) => {
     await apiFetch(`/admin/teachers/${teacherId}/toggle-status`, { method: 'PATCH' });
@@ -352,6 +383,7 @@ const handleResetStudentPassword = async (studentId, studentName) => {
 
   const loadGroupDashboard = async (group) => {
     setSelectedGroup(group);
+    setMobileMenuOpen(false);
     const stats = await apiFetch(`/teacher/groups/${group.id}/dashboard`);
     setGroupStats(stats);
   };
@@ -377,10 +409,13 @@ const handleResetStudentPassword = async (studentId, studentName) => {
     loadGroupDashboard(selectedGroup);
   };
 
+  // ==========================================
+  // 1. LOGIN SCREEN (MOBILE & DESKTOP)
+  // ==========================================
   if (!token || !user) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-lg border border-slate-200 p-8">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-lg border border-slate-200 p-6 sm:p-8">
           <div className="flex items-center justify-center gap-2 text-blue-600 font-bold text-2xl mb-6">
             <BookOpen className="w-8 h-8" /> EduAI
           </div>
@@ -394,7 +429,7 @@ const handleResetStudentPassword = async (studentId, studentName) => {
               <button
                 key={r.id}
                 onClick={() => { setAuthRole(r.id); setAuthError(''); }}
-                className={`py-2 rounded-lg text-xs font-semibold transition ${
+                className={`py-2.5 rounded-lg text-xs font-semibold transition ${
                   authRole === r.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600'
                 }`}
               >
@@ -426,19 +461,19 @@ const handleResetStudentPassword = async (studentId, studentName) => {
                 placeholder={authRole === 'teacher' ? 'Login (masalan: ustoz_ali_412)' : 'Login (masalan: ali_482)'}
                 value={username}
                 onChange={e => setUsername(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 text-sm"
+                className="w-full px-4 py-3.5 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 text-base sm:text-sm"
                 required
               />
               <input
                 type="password"
-                placeholder="Parol (6 xonali)"
+                placeholder="Parol"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 text-sm"
+                className="w-full px-4 py-3.5 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 text-base sm:text-sm"
                 required
               />
               {authError && <p className="text-red-500 text-xs">{authError}</p>}
-              <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition">
+              <button className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-semibold py-3.5 rounded-xl transition">
                 Tizimga kirish
               </button>
             </form>
@@ -448,50 +483,53 @@ const handleResetStudentPassword = async (studentId, studentName) => {
     );
   }
 
+  // ==========================================
+  // 2. ADMIN PANEL (MOBILE & DESKTOP)
+  // ==========================================
   if (user.role === 'admin') {
     return (
       <div className="min-h-screen bg-slate-50">
-        <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="w-7 h-7 text-blue-600" />
-            <div>
-              <h1 className="font-bold text-slate-800 text-lg">EduAI — Super Admin Panel</h1>
-              <p className="text-xs text-slate-500">{user.username}</p>
+        <header className="bg-white border-b border-slate-200 px-4 sm:px-8 py-3.5 sm:py-4 flex justify-between items-center sticky top-0 z-30">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <ShieldCheck className="w-6 h-6 sm:w-7 sm:h-7 text-blue-600 shrink-0" />
+            <div className="truncate">
+              <h1 className="font-bold text-slate-800 text-base sm:text-lg truncate">EduAI — Super Admin</h1>
+              <p className="text-[11px] sm:text-xs text-slate-500 truncate">{user.username}</p>
             </div>
           </div>
-          <button onClick={handleLogout} className="flex items-center gap-2 text-sm text-slate-600 hover:text-red-600">
-            <LogOut className="w-4 h-4" /> Chiqish
+          <button onClick={handleLogout} className="flex items-center gap-1.5 text-xs sm:text-sm text-slate-600 hover:text-red-600 shrink-0 px-2.5 py-1.5 rounded-lg hover:bg-red-50">
+            <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Chiqish</span>
           </button>
         </header>
 
-        <main className="max-w-6xl mx-auto p-8 space-y-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <main className="max-w-6xl mx-auto p-4 sm:p-8 space-y-6 sm:space-y-8">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {[
-              { label: 'Jami O‘qituvchilar', val: adminData.stats.totalTeachers || 0, icon: Users },
-              { label: 'Jami Guruhlar', val: adminData.stats.totalGroups || 0, icon: BookOpen },
-              { label: 'Jami O‘quvchilar', val: adminData.stats.totalStudents || 0, icon: Trophy },
-              { label: 'Yaratilgan AI Darslar', val: adminData.stats.totalLessons || 0, icon: Cpu }
+              { label: 'O‘qituvchilar', val: adminData.stats.totalTeachers || 0, icon: Users },
+              { label: 'Guruhlar', val: adminData.stats.totalGroups || 0, icon: BookOpen },
+              { label: 'O‘quvchilar', val: adminData.stats.totalStudents || 0, icon: Trophy },
+              { label: 'AI Darslar', val: adminData.stats.totalLessons || 0, icon: Cpu }
             ].map((s, i) => (
-              <div key={i} className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center justify-between">
+              <div key={i} className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 flex items-center justify-between">
                 <div>
                   <p className="text-xs text-slate-500">{s.label}</p>
-                  <p className="text-2xl font-bold text-slate-800 mt-1">{s.val}</p>
+                  <p className="text-xl sm:text-2xl font-bold text-slate-800 mt-1">{s.val}</p>
                 </div>
-                <s.icon className="w-8 h-8 text-blue-600 bg-blue-50 p-1.5 rounded-xl" />
+                <s.icon className="w-7 h-7 sm:w-8 sm:h-8 text-blue-600 bg-blue-50 p-1.5 rounded-xl shrink-0" />
               </div>
             ))}
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
-              <h2 className="font-bold text-slate-800">Yangi O‘qituvchi Qo‘shish (Login-Parol Generatori)</h2>
+          <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
+            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 space-y-4">
+              <h2 className="font-bold text-slate-800 text-sm sm:text-base">Yangi O‘qituvchi Qo‘shish</h2>
               <form onSubmit={handleCreateTeacher} className="space-y-3">
                 <input
                   type="text"
-                  placeholder="O‘qituvchi Ism-Familiyasi (masalan: Alisher Karimov)"
+                  placeholder="O‘qituvchi Ism-Familiyasi (Alisher Karimov)"
                   value={newTeacherName}
                   onChange={e => setNewTeacherName(e.target.value)}
-                  className="w-full px-4 py-2.5 border rounded-xl text-sm"
+                  className="w-full px-4 py-2.5 border rounded-xl text-base sm:text-sm"
                   required
                 />
                 <input
@@ -499,7 +537,7 @@ const handleResetStudentPassword = async (studentId, studentName) => {
                   placeholder="Fani (masalan: Matematika / Fizika)"
                   value={newTeacherSubject}
                   onChange={e => setNewTeacherSubject(e.target.value)}
-                  className="w-full px-4 py-2.5 border rounded-xl text-sm"
+                  className="w-full px-4 py-2.5 border rounded-xl text-base sm:text-sm"
                 />
                 <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm">
                   O‘qituvchi Akkaunti Yaratish
@@ -507,9 +545,9 @@ const handleResetStudentPassword = async (studentId, studentName) => {
               </form>
 
               {generatedTeacherCreds && (
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between">
-                  <div className="text-sm">
-                    <p className="font-bold text-slate-800">{generatedTeacherCreds.fullName}</p>
+                <div className="p-3.5 sm:p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between gap-2">
+                  <div className="text-xs sm:text-sm min-w-0">
+                    <p className="font-bold text-slate-800 truncate">{generatedTeacherCreds.fullName}</p>
                     <p>Login: <span className="font-mono font-bold text-blue-700">{generatedTeacherCreds.username}</span></p>
                     <p>Parol: <span className="font-mono font-bold text-blue-700">{generatedTeacherCreds.plainPassword}</span></p>
                   </div>
@@ -520,7 +558,7 @@ const handleResetStudentPassword = async (studentId, studentName) => {
                         'teacher_cred'
                       )
                     }
-                    className="bg-blue-600 text-white px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1"
+                    className="bg-blue-600 text-white px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1 shrink-0"
                   >
                     {copiedId === 'teacher_cred' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />} Copy
                   </button>
@@ -528,19 +566,19 @@ const handleResetStudentPassword = async (studentId, studentName) => {
               )}
             </div>
 
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
-              <h2 className="font-bold text-slate-800 flex items-center gap-2">
-                <Megaphone className="w-5 h-5 text-blue-600" /> Global E’lon (Barcha foydalanuvchilarga)
+            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 space-y-4">
+              <h2 className="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2">
+                <Megaphone className="w-5 h-5 text-blue-600" /> Global E’lon
               </h2>
               <form onSubmit={handleSaveAnnouncement} className="space-y-3">
                 <textarea
                   rows="3"
-                  placeholder="Barcha o‘qituvchi va o‘quvchilar ekranida chiqadigan xabar (o‘chirish uchun bo‘sh qoldiring)..."
+                  placeholder="Barcha foydalanuvchilarga ko‘rinadigan xabar (o‘chirish uchun bo‘sh qoldiring)..."
                   value={announcementInput}
                   onChange={e => setAnnouncementInput(e.target.value)}
-                  className="w-full p-3 border rounded-xl text-sm"
+                  className="w-full p-3 border rounded-xl text-base sm:text-sm"
                 />
-                <button className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-xl text-sm font-semibold">
+                <button className="w-full sm:w-auto bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-semibold">
                   E’lonni Saqlash
                 </button>
               </form>
@@ -548,68 +586,113 @@ const handleResetStudentPassword = async (studentId, studentName) => {
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-            <div className="p-5 border-b border-slate-200 font-bold text-slate-800">Ro‘yxatdan o‘tgan O‘qituvchilar</div>
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-                <tr>
-                  <th className="p-4">O‘qituvchi</th>
-                  <th className="p-4">Fani</th>
-                  <th className="p-4">Login</th>
-                  <th className="p-4">AI Darslar</th>
-                  <th className="p-4">Holati</th>
-                  <th className="p-4">Boshqaruv</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {adminData.teachers.map(t => (
-                  <tr key={t.id}>
-                    <td className="p-4 font-semibold text-slate-800">{t.full_name}</td>
-                    <td className="p-4 text-slate-600">{t.subject}</td>
-                    <td className="p-4 font-mono text-blue-700">{t.username}</td>
-                    <td className="p-4 font-semibold">{t.ai_requests_count} ta</td>
-                    <td className="p-4">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${t.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                        {t.is_active ? 'Faol' : 'Bloklangan'}
-                      </span>
-                    </td>
-                    <td className="p-4 flex gap-2">
-                      <button
-                        onClick={() => handleResetTeacherPassword(t.id)}
-                        className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-semibold flex items-center gap-1"
-                      >
-                        <KeyRound className="w-3.5 h-3.5" /> Yangi parol
-                      </button>
-                      <button
-                        onClick={() => handleToggleTeacher(t.id)}
-                        className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1"
-                      >
-                        <Ban className="w-3.5 h-3.5" /> {t.is_active ? 'Bloklash' : 'Ochish'}
-                      </button>
-                    </td>
+            <div className="p-4 sm:p-5 border-b border-slate-200 font-bold text-slate-800 text-sm sm:text-base">
+              Ro‘yxatdan o‘tgan O‘qituvchilar
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm whitespace-nowrap">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                  <tr>
+                    <th className="p-3.5 sm:p-4">O‘qituvchi</th>
+                    <th className="p-3.5 sm:p-4">Fani</th>
+                    <th className="p-3.5 sm:p-4">Login</th>
+                    <th className="p-3.5 sm:p-4">AI Darslar</th>
+                    <th className="p-3.5 sm:p-4">Holati</th>
+                    <th className="p-3.5 sm:p-4">Boshqaruv</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {adminData.teachers.map(t => (
+                    <tr key={t.id}>
+                      <td className="p-3.5 sm:p-4 font-semibold text-slate-800">{t.full_name}</td>
+                      <td className="p-3.5 sm:p-4 text-slate-600">{t.subject}</td>
+                      <td className="p-3.5 sm:p-4 font-mono text-blue-700">{t.username}</td>
+                      <td className="p-3.5 sm:p-4 font-semibold">{t.ai_requests_count} ta</td>
+                      <td className="p-3.5 sm:p-4">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${t.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                          {t.is_active ? 'Faol' : 'Bloklangan'}
+                        </span>
+                      </td>
+                      <td className="p-3.5 sm:p-4 flex gap-2">
+                        <button
+                          onClick={() => handleResetTeacherPassword(t.id)}
+                          className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-semibold flex items-center gap-1"
+                        >
+                          <KeyRound className="w-3.5 h-3.5" /> Yangi parol
+                        </button>
+                        <button
+                          onClick={() => handleToggleTeacher(t.id)}
+                          className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1"
+                        >
+                          <Ban className="w-3.5 h-3.5" /> {t.is_active ? 'Bloklash' : 'Ochish'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </main>
       </div>
     );
   }
 
+  // ==========================================
+  // 3. TEACHER PANEL (MOBILE & DESKTOP)
+  // ==========================================
   if (user.role === 'teacher') {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col">
         {announcement && (
           <div className="bg-blue-600 text-white text-xs font-semibold py-2 px-4 text-center flex items-center justify-center gap-2">
-            <Megaphone className="w-4 h-4" /> {announcement.message}
+            <Megaphone className="w-4 h-4 shrink-0" /> <span>{announcement.message}</span>
           </div>
         )}
-        <div className="flex flex-1">
-          <aside className="w-64 bg-white border-r border-slate-200 p-5 flex flex-col justify-between">
+
+        {/* Mobile Header (Teacher) */}
+        <header className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
+          <div className="flex items-center gap-2 text-blue-600 font-bold text-lg">
+            <BookOpen className="w-6 h-6" /> EduAI Ustoz
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowProfileModal(true)}
+              className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+              title="Parolni o'zgartirish"
+            >
+              <KeyRound className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 text-slate-700 hover:bg-slate-100 rounded-lg"
+            >
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+          </div>
+        </header>
+
+        <div className="flex flex-1 relative">
+          {/* Mobile Backdrop */}
+          {mobileMenuOpen && (
+            <div
+              onClick={() => setMobileMenuOpen(false)}
+              className="fixed inset-0 bg-slate-900/40 z-30 lg:hidden"
+            />
+          )}
+
+          {/* Sidebar / Mobile Drawer */}
+          <aside
+            className={`fixed lg:static inset-y-0 left-0 z-40 w-72 lg:w-64 bg-white border-r border-slate-200 p-5 flex flex-col justify-between transform transition-transform duration-200 ease-in-out ${
+              mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+            }`}
+          >
             <div>
-              <div className="flex items-center gap-2 text-blue-600 font-bold text-xl mb-6">
+              <div className="hidden lg:flex items-center gap-2 text-blue-600 font-bold text-xl mb-2">
                 <BookOpen className="w-6 h-6" /> EduAI Ustoz
               </div>
+              <p className="text-xs text-slate-500 mb-5 font-mono">Login: {user.username}</p>
+
               <form onSubmit={handleCreateGroup} className="flex gap-2 mb-4">
                 <input
                   type="text"
@@ -618,9 +701,11 @@ const handleResetStudentPassword = async (studentId, studentName) => {
                   onChange={e => setNewGroupName(e.target.value)}
                   className="w-full px-3 py-2 text-sm border rounded-lg"
                 />
-                <button className="bg-blue-600 text-white p-2 rounded-lg"><Plus className="w-4 h-4" /></button>
+                <button className="bg-blue-600 text-white p-2 rounded-lg shrink-0"><Plus className="w-4 h-4" /></button>
               </form>
-              <div className="space-y-1">
+
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Guruhlarim</p>
+              <div className="space-y-1 max-h-[50vh] overflow-y-auto">
                 {groups.map(g => (
                   <button
                     key={g.id}
@@ -629,47 +714,56 @@ const handleResetStudentPassword = async (studentId, studentName) => {
                       selectedGroup?.id === g.id ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-100'
                     }`}
                   >
-                    <Users className="w-4 h-4" /> {g.name}
+                    <Users className="w-4 h-4 shrink-0" /> <span className="truncate">{g.name}</span>
                   </button>
                 ))}
               </div>
             </div>
-            <button onClick={handleLogout} className="flex items-center gap-2 text-slate-500 hover:text-red-600 text-sm">
-              <LogOut className="w-4 h-4" /> Chiqish
-            </button>
+
+            <div className="space-y-3 pt-4 border-t border-slate-100">
+              <button
+                onClick={() => { setShowProfileModal(true); setMobileMenuOpen(false); }}
+                className="w-full flex items-center gap-2 text-slate-600 hover:text-blue-600 text-sm font-medium py-1"
+              >
+                <KeyRound className="w-4 h-4" /> Parolni o‘zgartirish
+              </button>
+              <button onClick={handleLogout} className="w-full flex items-center gap-2 text-slate-500 hover:text-red-600 text-sm py-1">
+                <LogOut className="w-4 h-4" /> Chiqish
+              </button>
+            </div>
           </aside>
 
-          <main className="flex-1 p-8 overflow-y-auto space-y-6">
+          <main className="flex-1 p-4 sm:p-8 overflow-y-auto space-y-6 w-full">
             {selectedGroup ? (
               <>
-                <div className="flex justify-between items-center">
-                  <h1 className="text-2xl font-bold text-slate-800">{selectedGroup.name} — Boshqaruv Paneli</h1>
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                  <h1 className="text-xl sm:text-2xl font-bold text-slate-800">{selectedGroup.name} — Boshqaruv</h1>
                   <a
                     href={`${API_URL}/teacher/groups/${selectedGroup.id}/export-csv`}
-                    className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-xl text-sm font-medium hover:bg-slate-50"
+                    className="inline-flex items-center justify-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 w-full sm:w-auto"
                   >
                     <Download className="w-4 h-4 text-blue-600" /> CSV Hisobot
                   </a>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200">
-                    <h2 className="font-semibold text-slate-800 mb-3">Yangi o‘quvchi qo‘shish</h2>
-                    <form onSubmit={handleAddStudent} className="flex gap-2">
+                <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
+                  <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200">
+                    <h2 className="font-semibold text-slate-800 mb-3 text-sm sm:text-base">Yangi o‘quvchi qo‘shish</h2>
+                    <form onSubmit={handleAddStudent} className="flex flex-col sm:flex-row gap-2">
                       <input
                         type="text"
-                        placeholder="Ism-Familiya (masalan: Ali Valiyev)"
+                        placeholder="Ism-Familiya (Ali Valiyev)"
                         value={newStudentName}
                         onChange={e => setNewStudentName(e.target.value)}
-                        className="flex-1 px-4 py-2.5 border rounded-xl text-sm"
+                        className="flex-1 px-4 py-2.5 border rounded-xl text-base sm:text-sm"
                       />
                       <button className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold">Yaratish</button>
                     </form>
 
                     {generatedCreds && (
-                      <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between">
-                        <div className="text-sm">
-                          <p className="font-bold text-slate-800">{generatedCreds.fullName}</p>
+                      <div className="mt-4 p-3.5 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between gap-2">
+                        <div className="text-xs sm:text-sm min-w-0">
+                          <p className="font-bold text-slate-800 truncate">{generatedCreds.fullName}</p>
                           <p>Login: <span className="font-mono font-bold text-blue-700">{generatedCreds.username}</span></p>
                           <p>Parol: <span className="font-mono font-bold text-blue-700">{generatedCreds.plainPassword}</span></p>
                         </div>
@@ -680,7 +774,7 @@ const handleResetStudentPassword = async (studentId, studentName) => {
                               'new'
                             )
                           }
-                          className="bg-blue-600 text-white px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1"
+                          className="bg-blue-600 text-white px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1 shrink-0"
                         >
                           {copiedId === 'new' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />} Copy
                         </button>
@@ -688,93 +782,109 @@ const handleResetStudentPassword = async (studentId, studentName) => {
                     )}
                   </div>
 
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-3">
-                    <h2 className="font-semibold text-slate-800">Guruhga AI Uyga Vazifa yuborish</h2>
+                  <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 space-y-3">
+                    <h2 className="font-semibold text-slate-800 text-sm sm:text-base">Guruhga AI Uyga Vazifa yuborish</h2>
                     <input
                       type="text"
                       placeholder="Mavzu nomi"
                       value={assignTitle}
                       onChange={e => setAssignTitle(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-xl text-sm"
+                      className="w-full px-3.5 py-2.5 border rounded-xl text-base sm:text-sm"
                     />
                     <textarea
                       rows="2"
                       placeholder="Dars matnini kiriting..."
                       value={assignText}
                       onChange={e => setAssignText(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-xl text-sm"
+                      className="w-full px-3.5 py-2.5 border rounded-xl text-base sm:text-sm"
                     />
                     <button
                       disabled={loadingAI}
                       onClick={() => handleGenerateLesson(selectedGroup.id)}
-                      className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2"
+                      className="w-full sm:w-auto bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
                     >
                       <Send className="w-4 h-4" /> {loadingAI ? 'AI tayyorlamoqda...' : 'Vazifa yaratish va yuborish'}
                     </button>
                   </div>
                 </div>
 
+                {/* O'quvchilar jadvali (Mobil scroll bilan) */}
                 <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-                      <tr>
-                        <th className="p-4">O‘quvchi</th>
-                        <th className="p-4">Login</th>
-                        <th className="p-4 text-left">Parol</th>
-                        <th className="p-4 text-left">Amal</th>
-                        <th className="p-4">Holati</th>
-                        <th className="p-4">Bugungi dars</th>
-                        <th className="p-4">O‘rtacha ball</th>
-                        <th className="p-4">Anti-Cheat</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {groupStats.students.map(st => (
-                        <tr key={st.id}>
-                          <td className="p-4 font-semibold text-slate-800">{st.full_name}</td>
-                          <td className="p-4 font-mono text-slate-600">{st.username}</td>
-                          <td className="p-4 font-semibold text-slate-800">{st.full_name}</td>
-                          <td className="p-4 font-mono text-slate-600">{st.username}</td>
-                          <td className="p-4">
-                            <span className="inline-flex items-center gap-1.5 text-xs font-medium">
-                              <span className={`w-2.5 h-2.5 rounded-full ${st.isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                              {st.isOnline ? 'Online' : 'Offline'}
-                            </span>
-                          </td>
-                          <td className="p-4">{st.minutesToday} daqiqa</td>
-                          <td className="p-4 font-semibold text-blue-600">{st.avgScore}%</td>
-                          <td className="p-4">
-                            {st.cheatWarnings > 0 ? (
-                              <span className="inline-flex items-center gap-1 text-red-600 text-xs font-semibold">
-                                <ShieldAlert className="w-4 h-4" /> {st.cheatWarnings} marta tabdan chiqqan
-                              </span>
-                            ) : (
-                              <span className="text-emerald-600 text-xs">Toza</span>
-                            )}
-                          </td>
+                  <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+                    <span className="font-bold text-slate-800 text-sm sm:text-base">O‘quvchilar ro‘yxati ({groupStats.students.length} ta)</span>
+                    <span className="text-[11px] text-slate-400 sm:hidden">← Chapga suring →</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm whitespace-nowrap">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                        <tr>
+                          <th className="p-3.5 sm:p-4">O‘quvchi</th>
+                          <th className="p-3.5 sm:p-4">Login</th>
+                          <th className="p-3.5 sm:p-4">Parol</th>
+                          <th className="p-3.5 sm:p-4">Parolni tiklash</th>
+                          <th className="p-3.5 sm:p-4">Holati</th>
+                          <th className="p-3.5 sm:p-4">Bugungi dars</th>
+                          <th className="p-3.5 sm:p-4">O‘rtacha ball</th>
+                          <th className="p-3.5 sm:p-4">Anti-Cheat</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {groupStats.students.map(st => (
+                          <tr key={st.id}>
+                            <td className="p-3.5 sm:p-4 font-semibold text-slate-800">{st.full_name}</td>
+                            <td className="p-3.5 sm:p-4 font-mono text-slate-600">{st.username}</td>
+                            <td className="p-3.5 sm:p-4 font-mono text-blue-700 font-semibold">
+                              {st.plain_password || '••••••'}
+                            </td>
+                            <td className="p-3.5 sm:p-4">
+                              <button
+                                onClick={() => handleResetStudentPassword(st.id, st.full_name)}
+                                className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition"
+                              >
+                                <KeyRound className="w-3.5 h-3.5" /> O‘zgartirish
+                              </button>
+                            </td>
+                            <td className="p-3.5 sm:p-4">
+                              <span className="inline-flex items-center gap-1.5 text-xs font-medium">
+                                <span className={`w-2.5 h-2.5 rounded-full ${st.isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                {st.isOnline ? 'Online' : 'Offline'}
+                              </span>
+                            </td>
+                            <td className="p-3.5 sm:p-4">{st.minutesToday} daqiqa</td>
+                            <td className="p-3.5 sm:p-4 font-semibold text-blue-600">{st.avgScore}%</td>
+                            <td className="p-3.5 sm:p-4">
+                              {st.cheatWarnings > 0 ? (
+                                <span className="inline-flex items-center gap-1 text-red-600 text-xs font-semibold">
+                                  <ShieldAlert className="w-4 h-4" /> {st.cheatWarnings} marta
+                                </span>
+                              ) : (
+                                <span className="text-emerald-600 text-xs">Toza</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200">
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4">
+                <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
+                  <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4 text-sm sm:text-base">
                       <Trophy className="w-5 h-5 text-amber-500" /> Guruh Reytingi (Leaderboard)
                     </h3>
                     <div className="space-y-2">
                       {groupStats.leaderboard.map((st, idx) => (
-                        <div key={st.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
-                          <span className="font-medium">#{idx + 1} {st.full_name}</span>
-                          <span className="font-bold text-blue-600">{st.xp_points} XP</span>
+                        <div key={st.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl text-sm">
+                          <span className="font-medium truncate pr-2">#{idx + 1} {st.full_name}</span>
+                          <span className="font-bold text-blue-600 shrink-0">{st.xp_points} XP</span>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200">
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4">
+                  <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4 text-sm sm:text-base">
                       <AlertTriangle className="w-5 h-5 text-red-500" /> Og‘riqli nuqtalar (Heatmap)
                     </h3>
                     {groupStats.heatmap.length === 0 ? (
@@ -793,41 +903,121 @@ const handleResetStudentPassword = async (studentId, studentName) => {
                 </div>
               </>
             ) : (
-              <p className="text-slate-500">Chap tomondan guruh yarating yoki tanlang.</p>
+              <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center space-y-3">
+                <p className="text-slate-600 text-sm">Guruh yaratish yoki tanlash uchun menyuni oching.</p>
+                <button
+                  onClick={() => setMobileMenuOpen(true)}
+                  className="lg:hidden bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold"
+                >
+                  Guruhlarni ochish
+                </button>
+              </div>
             )}
           </main>
         </div>
+
+        {/* O'qituvchi parol o'zgartirish modali */}
+        {showProfileModal && (
+          <div
+            onClick={() => setShowProfileModal(false)}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-5 relative"
+            >
+              <button
+                onClick={() => setShowProfileModal(false)}
+                className="absolute top-4 right-4 p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">{user.fullName}</h2>
+                <p className="text-xs text-slate-500 font-mono mt-0.5">Login: {user.username}</p>
+              </div>
+
+              <form onSubmit={handleChangeOwnPassword} className="space-y-3 border-t border-slate-100 pt-4">
+                <h3 className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
+                  <Lock className="w-4 h-4 text-blue-600" /> Shaxsiy parolni o‘zgartirish
+                </h3>
+                <input
+                  type="password"
+                  placeholder="Eski parolingiz"
+                  value={oldPasswordInput}
+                  onChange={e => setOldPasswordInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:border-blue-500"
+                  required
+                />
+                <input
+                  type="text"
+                  placeholder="Yangi parol"
+                  value={newPasswordInput}
+                  onChange={e => setNewPasswordInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:border-blue-500"
+                  required
+                />
+                <button
+                  disabled={passwordChangeLoading}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl text-sm transition"
+                >
+                  {passwordChangeLoading ? 'Saqlanmoqda...' : 'Yangi parolni saqlash'}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
+  // ==========================================
+  // 4. STUDENT PANEL (MOBILE & DESKTOP)
+  // ==========================================
+  const studentNavItems = [
+    { id: 'new', label: 'Yangi dars', icon: Plus },
+    { id: 'library', label: 'Konspektlar', icon: FileText },
+    { id: 'stats', label: 'AI Tahlil', icon: BarChart3 }
+  ];
+
+  const handleStudentNavClick = (id) => {
+    setActiveNav(id);
+    if (id === 'stats') {
+      apiFetch('/ai/weakness-detector', { method: 'POST' }).then(r => setWeaknessReport(r.analysis));
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-slate-50 flex flex-col pb-20 lg:pb-0">
       {announcement && (
         <div className="bg-blue-600 text-white text-xs font-semibold py-2 px-4 text-center flex items-center justify-center gap-2">
-          <Megaphone className="w-4 h-4" /> {announcement.message}
+          <Megaphone className="w-4 h-4 shrink-0" /> <span>{announcement.message}</span>
         </div>
       )}
+
+      {/* Mobile Top Bar (Student) */}
+      <header className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
+        <div className="flex items-center gap-2 text-blue-600 font-bold text-lg">
+          <BookOpen className="w-6 h-6" /> EduAI
+        </div>
+        <button onClick={handleLogout} className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-red-600 px-2.5 py-1.5 rounded-lg bg-slate-100">
+          <LogOut className="w-3.5 h-3.5" /> Chiqish
+        </button>
+      </header>
+
       <div className="flex flex-1">
-        <aside className="w-64 bg-white border-r border-slate-200 p-5 flex flex-col justify-between">
+        {/* Desktop Sidebar (Student) */}
+        <aside className="hidden lg:flex w-64 bg-white border-r border-slate-200 p-5 flex-col justify-between">
           <div>
             <div className="flex items-center gap-2 text-blue-600 font-bold text-xl mb-8">
               <BookOpen className="w-6 h-6" /> EduAI
             </div>
             <nav className="space-y-1.5">
-              {[
-                { id: 'new', label: 'Yangi dars', icon: Plus },
-                { id: 'library', label: 'Mening konspektlarim', icon: FileText },
-                { id: 'stats', label: 'Statistika va AI Tahlil', icon: BarChart3 }
-              ].map(item => (
+              {studentNavItems.map(item => (
                 <button
                   key={item.id}
-                  onClick={() => {
-                    setActiveNav(item.id);
-                    if (item.id === 'stats') {
-                      apiFetch('/ai/weakness-detector', { method: 'POST' }).then(r => setWeaknessReport(r.analysis));
-                    }
-                  }}
+                  onClick={() => handleStudentNavClick(item.id)}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${
                     activeNav === item.id ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
                   }`}
@@ -842,58 +1032,58 @@ const handleResetStudentPassword = async (studentId, studentName) => {
           </button>
         </aside>
 
-        <main className="flex-1 p-8 overflow-y-auto">
-          <div className="flex justify-between items-center mb-8">
-           <div className="flex items-center gap-3">
-  <label className="cursor-pointer relative group" title="Rasm qo‘shish / o‘zgartirish">
-    {user?.avatarUrl ? (
-      <img
-        src={user.avatarUrl}
-        alt="Avatar"
-        className="w-12 h-12 rounded-full object-cover border-2 border-blue-500"
-      />
-    ) : (
-      <div className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-lg">
-        {user?.fullName?.[0]?.toUpperCase() || 'U'}
-      </div>
-    )}
-    <span className="block text-[10px] text-center text-blue-600 mt-0.5">
-      {isUploadingAvatar ? 'Yuklanmoqda...' : 'Rasm'}
-    </span>
-    <input
-      type="file"
-      accept="image/*"
-      onChange={handleAvatarUpload}
-      disabled={isUploadingAvatar}
-      className="hidden"
-    />
-  </label>
-  <div>
-    <h1 className="text-xl font-bold text-slate-800">Salom, {user.fullName}!</h1>
-    <p className="text-xs text-slate-500">Bugungi o‘qish rejangizni davom ettiring</p>
-  </div>
-</div>
+        <main className="flex-1 p-4 sm:p-8 overflow-y-auto w-full">
+          {/* Profile Header & Stats Badges */}
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6 sm:mb-8">
             <div className="flex items-center gap-3">
-              <div className="bg-white border border-slate-200 px-3.5 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold text-orange-600">
-                <Flame className="w-4 h-4" /> {user.streak} kun
+              <button
+                onClick={() => setShowProfileModal(true)}
+                className="relative group focus:outline-none shrink-0"
+                title="Profilni ko'rish va rasmni kattalashtirish"
+              >
+                {user?.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt="Avatar"
+                    className="w-12 h-12 rounded-full object-cover border-2 border-blue-500 group-hover:scale-105 transition"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-lg group-hover:scale-105 transition">
+                    {user?.fullName?.[0]?.toUpperCase() || 'U'}
+                  </div>
+                )}
+                <span className="block text-[10px] text-center text-blue-600 font-semibold mt-0.5">
+                  Profil
+                </span>
+              </button>
+              <div className="min-w-0">
+                <h1 className="text-lg sm:text-xl font-bold text-slate-800 truncate">Salom, {user.fullName}!</h1>
+                <p className="text-xs text-slate-500 truncate">Bugungi o‘qish rejangizni davom ettiring</p>
               </div>
-              <div className="bg-white border border-slate-200 px-3.5 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold text-amber-600">
-                <Trophy className="w-4 h-4" /> {user.xp} XP
+            </div>
+
+            {/* Stats Badges (Responsive grid on mobile) */}
+            <div className="grid grid-cols-3 sm:flex items-center gap-2 sm:gap-3">
+              <div className="bg-white border border-slate-200 px-2.5 sm:px-3.5 py-2 rounded-xl flex items-center justify-center gap-1.5 text-xs sm:text-sm font-semibold text-orange-600">
+                <Flame className="w-4 h-4 shrink-0" /> <span>{user.streak} kun</span>
               </div>
-              <div className="bg-blue-50 border border-blue-200 px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold text-blue-700">
-                <Clock className="w-4 h-4" /> Dars vaqti: {minutesToday} daqiqa
+              <div className="bg-white border border-slate-200 px-2.5 sm:px-3.5 py-2 rounded-xl flex items-center justify-center gap-1.5 text-xs sm:text-sm font-semibold text-amber-600">
+                <Trophy className="w-4 h-4 shrink-0" /> <span>{user.xp} XP</span>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 px-2.5 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-1.5 text-xs sm:text-sm font-semibold text-blue-700">
+                <Clock className="w-4 h-4 shrink-0" /> <span>{minutesToday} daq</span>
               </div>
             </div>
           </div>
 
           {activeNav === 'new' && (
-            <div className="max-w-4xl mx-auto space-y-6">
+            <div className="max-w-4xl mx-auto space-y-5 sm:space-y-6">
               {!currentLesson ? (
-                <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-                  <label className="border-2 border-dashed border-blue-200 hover:border-blue-500 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer bg-blue-50/30 transition">
-                    <Upload className="w-10 h-10 text-blue-600 mb-2" />
-                    <span className="font-semibold text-slate-700">
-                      {selectedFile ? selectedFile.name : 'PDF yoki daftar rasmini yuklang (Drag & Drop)'}
+                <div className="bg-white p-5 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-5 sm:space-y-6">
+                  <label className="border-2 border-dashed border-blue-200 hover:border-blue-500 rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center text-center cursor-pointer bg-blue-50/30 transition">
+                    <Upload className="w-9 h-9 sm:w-10 sm:h-10 text-blue-600 mb-2" />
+                    <span className="font-semibold text-slate-700 text-sm sm:text-base">
+                      {selectedFile ? selectedFile.name : 'PDF yoki daftar rasmini yuklang'}
                     </span>
                     <span className="text-xs text-slate-400 mt-1">PDF, JPG, PNG (20 MB gacha)</span>
                     <input type="file" accept=".pdf,image/*" className="hidden" onChange={e => setSelectedFile(e.target.files[0])} />
@@ -904,28 +1094,29 @@ const handleResetStudentPassword = async (studentId, studentName) => {
                     placeholder="Yoki dars matnini shu yerga joylashtiring..."
                     value={inputText}
                     onChange={e => setInputText(e.target.value)}
-                    className="w-full p-4 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 text-sm"
+                    className="w-full p-3.5 sm:p-4 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 text-base sm:text-sm"
                   />
 
                   <button
                     disabled={loadingAI}
                     onClick={() => handleGenerateLesson(null)}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2"
+                    className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 text-sm sm:text-base"
                   >
-                    <Sparkles className="w-5 h-5" />
-                    {loadingAI ? 'Gemini AI konspekt va test tayyorlamoqda...' : 'AI bilan Dars Yaratish'}
+                    <Sparkles className="w-5 h-5 shrink-0" />
+                    {loadingAI ? 'Gemini AI tayyorlamoqda...' : 'AI bilan Dars Yaratish'}
                   </button>
                 </div>
               ) : (
-                <div className="space-y-6">
-                  <div className="flex justify-between items-center">
-                    <h2 className="text-2xl font-bold text-slate-800">{currentLesson.title}</h2>
-                    <button onClick={() => setCurrentLesson(null)} className="text-sm text-blue-600 font-semibold hover:underline">
+                <div className="space-y-5 sm:space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                    <h2 className="text-xl sm:text-2xl font-bold text-slate-800">{currentLesson.title}</h2>
+                    <button onClick={() => setCurrentLesson(null)} className="text-sm text-blue-600 font-semibold hover:underline self-start sm:self-auto">
                       + Yangi material yuklash
                     </button>
                   </div>
 
-                  <div className="flex gap-2 bg-white p-1.5 rounded-xl border border-slate-200">
+                  {/* Lesson Tabs (2x2 grid on mobile, 4-col row on desktop) */}
+                  <div className="grid grid-cols-2 sm:flex gap-1.5 sm:gap-2 bg-white p-1.5 rounded-xl border border-slate-200">
                     {[
                       { id: 'summary', label: 'Qisqa konspekt' },
                       { id: 'flashcards', label: 'Flashcards' },
@@ -935,7 +1126,7 @@ const handleResetStudentPassword = async (studentId, studentName) => {
                       <button
                         key={t.id}
                         onClick={() => setActiveTab(t.id)}
-                        className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition ${
+                        className={`flex-1 py-2.5 px-2 rounded-lg text-xs sm:text-sm font-semibold transition ${
                           activeTab === t.id ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'
                         }`}
                       >
@@ -945,7 +1136,7 @@ const handleResetStudentPassword = async (studentId, studentName) => {
                   </div>
 
                   {activeTab === 'summary' && (
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-3">
+                    <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 space-y-3">
                       {currentLesson.summary.map((point, idx) => (
                         <div key={idx} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl">
                           <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center shrink-0 mt-0.5">
@@ -961,23 +1152,24 @@ const handleResetStudentPassword = async (studentId, studentName) => {
                     <div className="space-y-4">
                       <div
                         onClick={() => setFlipped(!flipped)}
-                        className="bg-white border-2 border-blue-100 rounded-2xl p-12 min-h-[240px] flex flex-col items-center justify-center text-center cursor-pointer shadow-sm"
+                        className="bg-white border-2 border-blue-100 rounded-2xl p-6 sm:p-12 min-h-[210px] sm:min-h-[240px] flex flex-col items-center justify-center text-center cursor-pointer shadow-sm"
                       >
                         <span className="text-xs uppercase tracking-wider text-blue-600 font-bold mb-3">
                           {flipped ? 'Javob' : `Savol (${cardIndex + 1} / ${currentLesson.flashcards.length})`}
                         </span>
-                        <p className="text-xl font-semibold text-slate-800">
+                        <p className="text-lg sm:text-xl font-semibold text-slate-800">
                           {flipped ? currentLesson.flashcards[cardIndex]?.a : currentLesson.flashcards[cardIndex]?.q}
                         </p>
+                        <span className="text-[11px] text-slate-400 mt-4">(Aylantirish uchun bosing)</span>
                       </div>
-                      <div className="grid grid-cols-3 gap-3">
-                        <button onClick={() => handleRateFlashcard(1)} className="py-2.5 bg-red-50 text-red-600 font-semibold rounded-xl text-sm">
-                          Qiyin (Qayta chiqsin)
+                      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                        <button onClick={() => handleRateFlashcard(1)} className="py-3 px-2 bg-red-50 text-red-600 font-semibold rounded-xl text-xs sm:text-sm">
+                          Qiyin
                         </button>
-                        <button onClick={() => handleRateFlashcard(2)} className="py-2.5 bg-amber-50 text-amber-600 font-semibold rounded-xl text-sm">
+                        <button onClick={() => handleRateFlashcard(2)} className="py-3 px-2 bg-amber-50 text-amber-600 font-semibold rounded-xl text-xs sm:text-sm">
                           O‘rtacha
                         </button>
-                        <button onClick={() => handleRateFlashcard(3)} className="py-2.5 bg-emerald-50 text-emerald-600 font-semibold rounded-xl text-sm">
+                        <button onClick={() => handleRateFlashcard(3)} className="py-3 px-2 bg-emerald-50 text-emerald-600 font-semibold rounded-xl text-xs sm:text-sm">
                           Oson
                         </button>
                       </div>
@@ -985,7 +1177,7 @@ const handleResetStudentPassword = async (studentId, studentName) => {
                   )}
 
                   {activeTab === 'quiz' && (
-                    <div className="space-y-6">
+                    <div className="space-y-5 sm:space-y-6">
                       {tabSwitches > 0 && (
                         <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-semibold">
                           Ogohlantirish: Test vaqtida boshqa oynaga {tabSwitches} marta o‘tdingiz (Anti-Cheat qayd etildi).
@@ -998,8 +1190,8 @@ const handleResetStudentPassword = async (studentId, studentName) => {
                         const isWrong = isAnswered && chosen !== q.correctIndex;
 
                         return (
-                          <div key={qIdx} className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
-                            <p className="font-semibold text-slate-800">{qIdx + 1}. {q.question}</p>
+                          <div key={qIdx} className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 space-y-4">
+                            <p className="font-semibold text-slate-800 text-sm sm:text-base">{qIdx + 1}. {q.question}</p>
                             <div className="space-y-2">
                               {q.options.map((opt, oIdx) => {
                                 let style = 'border-slate-200 hover:bg-slate-50';
@@ -1013,29 +1205,29 @@ const handleResetStudentPassword = async (studentId, studentName) => {
                                     key={oIdx}
                                     disabled={isAnswered}
                                     onClick={() => setAnswers(prev => ({ ...prev, [qIdx]: oIdx }))}
-                                    className={`w-full text-left p-3.5 rounded-xl border text-sm font-medium flex justify-between items-center ${style}`}
+                                    className={`w-full text-left p-3.5 rounded-xl border text-sm font-medium flex justify-between items-center gap-2 ${style}`}
                                   >
                                     <span>{opt}</span>
-                                    {isAnswered && oIdx === q.correctIndex && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
-                                    {isAnswered && oIdx === chosen && oIdx !== q.correctIndex && <XCircle className="w-5 h-5 text-red-600" />}
+                                    {isAnswered && oIdx === q.correctIndex && <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />}
+                                    {isAnswered && oIdx === chosen && oIdx !== q.correctIndex && <XCircle className="w-5 h-5 text-red-600 shrink-0" />}
                                   </button>
                                 );
                               })}
                             </div>
 
                             {isWrong && (
-                              <div className="pt-2">
+                              <div className="pt-1">
                                 {!tutorExplanations[qIdx] ? (
                                   <button
                                     disabled={loadingTutor === qIdx}
                                     onClick={() => askAiTutor(qIdx, q, chosen)}
-                                    className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2"
+                                    className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2"
                                   >
                                     <Sparkles className="w-4 h-4" />
                                     {loadingTutor === qIdx ? 'AI Repetitor tushuntirmoqda...' : 'AI Repetitordan so‘rash'}
                                   </button>
                                 ) : (
-                                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-slate-700 leading-relaxed">
+                                  <div className="p-3.5 sm:p-4 bg-blue-50 border border-blue-200 rounded-xl text-xs sm:text-sm text-slate-700 leading-relaxed">
                                     <span className="font-bold text-blue-700 block mb-1">AI Repetitor izohi:</span>
                                     {tutorExplanations[qIdx]}
                                   </div>
@@ -1047,12 +1239,12 @@ const handleResetStudentPassword = async (studentId, studentName) => {
                       })}
 
                       {!quizSubmitted ? (
-                        <button onClick={submitQuiz} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">
+                        <button onClick={submitQuiz} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl text-sm sm:text-base">
                           Testni yakunlash va ballni saqlash
                         </button>
                       ) : (
-                        <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-2xl text-center">
-                          <p className="text-lg font-bold text-emerald-800">
+                        <div className="p-5 sm:p-6 bg-emerald-50 border border-emerald-200 rounded-2xl text-center">
+                          <p className="text-base sm:text-lg font-bold text-emerald-800">
                             Natija: {Object.entries(answers).filter(([i, a]) => a === currentLesson.quiz[i].correctIndex).length} / {currentLesson.quiz.length} (
                             {Math.round(
                               (Object.entries(answers).filter(([i, a]) => a === currentLesson.quiz[i].correctIndex).length /
@@ -1067,18 +1259,18 @@ const handleResetStudentPassword = async (studentId, studentName) => {
                   )}
 
                   {activeTab === 'podcast' && (
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
-                      <div className="flex gap-3">
-                        <button onClick={playPodcast} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2">
-                          <Volume2 className="w-4 h-4" /> Podkastni tinglash
+                    <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 space-y-4">
+                      <div className="flex flex-wrap gap-2.5 sm:gap-3">
+                        <button onClick={playPodcast} className="flex-1 sm:flex-none bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2">
+                          <Volume2 className="w-4 h-4" /> Tinglash
                         </button>
-                        <button onClick={() => window.speechSynthesis.cancel()} className="bg-slate-100 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2">
+                        <button onClick={() => window.speechSynthesis.cancel()} className="flex-1 sm:flex-none bg-slate-100 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2">
                           <Square className="w-4 h-4" /> To‘xtatish
                         </button>
                       </div>
                       <div className="space-y-2">
                         {(currentLesson.podcast_script || []).map((line, idx) => (
-                          <p key={idx} className="text-sm p-3 bg-slate-50 rounded-xl">
+                          <p key={idx} className="text-sm p-3 bg-slate-50 rounded-xl leading-relaxed">
                             <span className="font-bold text-blue-600">{line.speaker}: </span>
                             {line.text}
                           </p>
@@ -1092,26 +1284,30 @@ const handleResetStudentPassword = async (studentId, studentName) => {
           )}
 
           {activeNav === 'library' && (
-            <div className="grid md:grid-cols-2 gap-4">
-              {lessons.map(l => (
-                <div
-                  key={l.id}
-                  onClick={() => { openLesson(l); setActiveNav('new'); }}
-                  className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-blue-500 cursor-pointer transition"
-                >
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${l.group_id ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-blue-600'}`}>
-                    {l.group_id ? 'O‘qituvchi vazifasi' : 'Shaxsiy konspekt'}
-                  </span>
-                  <h3 className="font-bold text-slate-800 mt-3">{l.title}</h3>
-                  <p className="text-xs text-slate-400 mt-1">{new Date(l.created_at).toLocaleDateString()}</p>
-                </div>
-              ))}
+            <div className="grid sm:grid-cols-2 gap-3.5 sm:gap-4">
+              {lessons.length === 0 ? (
+                <p className="text-sm text-slate-500">Hozircha konspektlar mavjud emas.</p>
+              ) : (
+                lessons.map(l => (
+                  <div
+                    key={l.id}
+                    onClick={() => { openLesson(l); setActiveNav('new'); }}
+                    className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 hover:border-blue-500 cursor-pointer transition"
+                  >
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${l.group_id ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-blue-600'}`}>
+                      {l.group_id ? 'O‘qituvchi vazifasi' : 'Shaxsiy konspekt'}
+                    </span>
+                    <h3 className="font-bold text-slate-800 mt-3 text-sm sm:text-base">{l.title}</h3>
+                    <p className="text-xs text-slate-400 mt-1">{new Date(l.created_at).toLocaleDateString()}</p>
+                  </div>
+                ))
+              )}
             </div>
           )}
 
           {activeNav === 'stats' && (
-            <div className="max-w-3xl bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
-              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <div className="max-w-3xl bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 space-y-4">
+              <h2 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-blue-600" /> AI Xatolar Tahlilchisi (Weakness Detector)
               </h2>
               <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
@@ -1121,6 +1317,112 @@ const handleResetStudentPassword = async (studentId, studentName) => {
           )}
         </main>
       </div>
+
+      {/* Mobile Bottom Navigation Bar (Student) */}
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 flex justify-around items-center py-2 px-2 z-30">
+        {studentNavItems.map(item => (
+          <button
+            key={item.id}
+            onClick={() => handleStudentNavClick(item.id)}
+            className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl text-xs font-semibold transition ${
+              activeNav === item.id ? 'text-blue-600 bg-blue-50' : 'text-slate-500'
+            }`}
+          >
+            <item.icon className="w-5 h-5 mb-0.5" />
+            <span>{item.label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {/* ==========================================
+          O'QUVCHI PROFILI VA KATTALASHGAN RASM MODALI
+         ========================================== */}
+      {showProfileModal && (
+        <div
+          onClick={() => setShowProfileModal(false)}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-5 relative my-auto"
+          >
+            <button
+              onClick={() => setShowProfileModal(false)}
+              className="absolute top-4 right-4 p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex flex-col items-center text-center pt-2">
+              {user?.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt="Kattalashtirilgan profil rasmi"
+                  className="w-36 h-36 sm:w-44 sm:h-44 rounded-3xl object-cover border-4 border-blue-100 shadow-md"
+                />
+              ) : (
+                <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-3xl bg-blue-600 text-white flex items-center justify-center font-bold text-5xl shadow-md">
+                  {user?.fullName?.[0]?.toUpperCase() || 'U'}
+                </div>
+              )}
+
+              <label className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-semibold cursor-pointer transition">
+                <Camera className="w-4 h-4" />
+                {isUploadingAvatar ? 'Rasm yuklanmoqda...' : 'Rasmni yangilash'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarUpload}
+                  disabled={isUploadingAvatar}
+                  className="hidden"
+                />
+              </label>
+
+              <h2 className="text-lg sm:text-xl font-bold text-slate-800 mt-4">{user.fullName}</h2>
+
+              <div className="mt-2 inline-flex items-center gap-2 px-3.5 py-1.5 bg-slate-100 rounded-xl text-xs">
+                <span className="text-slate-500">Login:</span>
+                <span className="font-mono font-bold text-blue-700">{user.username}</span>
+                <button
+                  onClick={() => copyText(user.username, 'student_login')}
+                  className="text-slate-500 hover:text-blue-600"
+                  title="Loginni nusxalash"
+                >
+                  {copiedId === 'student_login' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleChangeOwnPassword} className="space-y-3 border-t border-slate-100 pt-4">
+              <h3 className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
+                <Lock className="w-4 h-4 text-blue-600" /> Parolni o‘zgartirish
+              </h3>
+              <input
+                type="password"
+                placeholder="Hozirgi parolingiz"
+                value={oldPasswordInput}
+                onChange={e => setOldPasswordInput(e.target.value)}
+                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:border-blue-500"
+                required
+              />
+              <input
+                type="text"
+                placeholder="Yangi parol"
+                value={newPasswordInput}
+                onChange={e => setNewPasswordInput(e.target.value)}
+                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:border-blue-500"
+                required
+              />
+              <button
+                disabled={passwordChangeLoading}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl text-sm transition"
+              >
+                {passwordChangeLoading ? 'Saqlanmoqda...' : 'Yangi parolni saqlash'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

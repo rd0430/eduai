@@ -28,7 +28,7 @@ const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supaba
 const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// Gemini band bo'lsa qayta urinadi; 45 soniyada javob bo'lmasa to'xtatadi
+// Gemini band bo'lsa qayta urinadi; 90 soniyada javob bo'lmasa to'xtatadi
 async function generateWithRetry(params) {
   const models = [params.model, process.env.GEMINI_FALLBACK_MODEL].filter(Boolean);
   let lastErr;
@@ -42,7 +42,7 @@ async function generateWithRetry(params) {
       } catch (err) {
         lastErr = err;
         console.error(`GEMINI XATO (${model}, urinish ${i + 1}):`, err.message);
-        if (/timeout/i.test(String(err.message))) break; // sekin model: keyingisiga o'tamiz
+        if (/timeout/i.test(String(err.message))) break;
         if (!/503|429|UNAVAILABLE|overloaded|high demand/i.test(String(err.message))) throw err;
         await sleep(3000 * (i + 1));
       }
@@ -50,6 +50,7 @@ async function generateWithRetry(params) {
   }
   throw lastErr;
 }
+
 const googleClient = process.env.GOOGLE_CLIENT_ID ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID) : null;
 
 app.use(cors());
@@ -80,6 +81,10 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', port: process.env.PORT || 5000 });
 });
 
+// ==========================================
+// AUTHENTICATION
+// ==========================================
+
 app.post('/api/auth/google-admin', async (req, res) => {
   try {
     if (!googleClient) return res.status(500).json({ error: 'GOOGLE_CLIENT_ID kiritilmagan!' });
@@ -99,35 +104,134 @@ app.post('/api/auth/google-admin', async (req, res) => {
 app.post('/api/auth/login', checkConfig, async (req, res) => {
   try {
     const { username, password, role } = req.body;
-    const { data: user, error } = await supabase.from('users').select('*').eq('username', username.trim().toLowerCase()).eq('role', role).single();
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', username.trim().toLowerCase())
+      .eq('role', role)
+      .single();
+
     if (error || !user) return res.status(401).json({ error: 'Login yoki rol xato' });
     if (!user.is_active) return res.status(403).json({ error: 'Akkaunt bloklangan' });
+
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'Parol noto‘g‘ri' });
+
     const today = new Date().toISOString().split('T')[0];
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
     let streak = user.streak_days || 0;
     if (user.last_active_date !== today) streak = user.last_active_date === yesterday ? streak + 1 : 1;
-    await supabase.from('users').update({ last_active_date: today, streak_days: streak, is_online: true, last_seen: new Date().toISOString() }).eq('id', user.id);
-    const token = jwt.sign({ id: user.id, role: user.role, group_id: user.group_id }, process.env.JWT_SECRET || 'eduai_default_secret', { expiresIn: '7d' });
-    res.json({ token, user: { id: user.id, fullName: user.full_name, subject: user.subject, username: user.username, role: user.role, groupId: user.group_id, xp: user.xp_points, streak, avatarUrl: user.avatar_url } });
+
+    await supabase
+      .from('users')
+      .update({ last_active_date: today, streak_days: streak, is_online: true, last_seen: new Date().toISOString() })
+      .eq('id', user.id);
+
+    const token = jwt.sign(
+      { id: user.id, role: user.role, group_id: user.group_id },
+      process.env.JWT_SECRET || 'eduai_default_secret',
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        fullName: user.full_name,
+        subject: user.subject,
+        username: user.username,
+        role: user.role,
+        groupId: user.group_id,
+        xp: user.xp_points,
+        streak,
+        avatarUrl: user.avatar_url
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// O'quvchi va O'qituvchi o'z parolini o'zgartirishi
+app.post('/api/auth/change-password', authenticate, checkConfig, async (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+
+    if (req.user.id === 'super_admin') {
+      return res.status(403).json({ error: 'Super Admin paroli Google akkaunt orqali boshqariladi' });
+    }
+
+    if (!oldPassword || !newPassword || newPassword.trim().length < 4) {
+      return res.status(400).json({ error: 'Yangi parol kamida 4 ta belgidan iborat bo‘lishi kerak' });
+    }
+
+    const { data: user, error: fetchError } = await supabase
+      .from('users')
+      .select('id, password_hash')
+      .eq('id', req.user.id)
+      .single();
+
+    if (fetchError || !user) {
+      return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
+    }
+
+    const valid = await bcrypt.compare(oldPassword, user.password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Hozirgi parolingiz noto‘g‘ri kiritildi!' });
+    }
+
+    const cleanNewPassword = newPassword.trim();
+    const newPasswordHash = await bcrypt.hash(cleanNewPassword, 10);
+
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({
+        password_hash: newPasswordHash,
+        plain_password: cleanNewPassword
+      })
+      .eq('id', req.user.id);
+
+    if (updateError) throw updateError;
+
+    res.json({ ok: true, message: 'Parolingiz muvaffaqiyatli yangilandi' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 app.post('/api/auth/logout', authenticate, async (req, res) => {
-  if (supabase && req.user.id !== 'super_admin') await supabase.from('users').update({ is_online: false }).eq('id', req.user.id);
+  if (supabase && req.user.id !== 'super_admin') {
+    await supabase.from('users').update({ is_online: false }).eq('id', req.user.id);
+  }
   res.json({ ok: true });
 });
 
+// ==========================================
+// SUPER ADMIN ROUTES
+// ==========================================
+
 app.get('/api/admin/overview', authenticate, requireAdmin, checkConfig, async (req, res) => {
-  const { data: teachers } = await supabase.from('users').select('id, full_name, subject, username, is_active, ai_requests_count, is_online, created_at').eq('role', 'teacher').order('created_at', { ascending: false });
+  const { data: teachers } = await supabase
+    .from('users')
+    .select('id, full_name, subject, username, is_active, ai_requests_count, is_online, created_at')
+    .eq('role', 'teacher')
+    .order('created_at', { ascending: false });
+
   const { count: studentCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student');
   const { count: groupCount } = await supabase.from('groups').select('*', { count: 'exact', head: true });
   const { count: lessonCount } = await supabase.from('lessons').select('*', { count: 'exact', head: true });
   const { data: announcement } = await supabase.from('announcements').select('*').eq('is_active', true).order('created_at', { ascending: false }).limit(1).single();
-  res.json({ teachers: teachers || [], stats: { totalTeachers: teachers?.length || 0, totalStudents: studentCount || 0, totalGroups: groupCount || 0, totalLessons: lessonCount || 0 }, activeAnnouncement: announcement || null });
+
+  res.json({
+    teachers: teachers || [],
+    stats: {
+      totalTeachers: teachers?.length || 0,
+      totalStudents: studentCount || 0,
+      totalGroups: groupCount || 0,
+      totalLessons: lessonCount || 0
+    },
+    activeAnnouncement: announcement || null
+  });
 });
 
 app.post('/api/admin/teachers', authenticate, requireAdmin, checkConfig, async (req, res) => {
@@ -137,7 +241,21 @@ app.post('/api/admin/teachers', authenticate, requireAdmin, checkConfig, async (
     const username = `ustoz_${cleanName}_${Math.floor(100 + Math.random() * 900)}`;
     const plainPassword = String(Math.floor(100000 + Math.random() * 900000));
     const passwordHash = await bcrypt.hash(plainPassword, 10);
-    const { data: teacher, error } = await supabase.from('users').insert({ role: 'teacher', full_name: fullName.trim(), subject: subject?.trim() || 'Umumiy fan', username, password_hash: passwordHash, is_active: true }).select().single();
+
+    const { data: teacher, error } = await supabase
+      .from('users')
+      .insert({
+        role: 'teacher',
+        full_name: fullName.trim(),
+        subject: subject?.trim() || 'Umumiy fan',
+        username,
+        password_hash: passwordHash,
+        plain_password: plainPassword,
+        is_active: true
+      })
+      .select()
+      .single();
+
     if (error) throw error;
     res.json({ id: teacher.id, fullName: teacher.full_name, subject: teacher.subject, username, plainPassword });
   } catch (err) {
@@ -156,7 +274,12 @@ app.post('/api/admin/teachers/:id/reset-password', authenticate, requireAdmin, c
   const { id } = req.params;
   const plainPassword = String(Math.floor(100000 + Math.random() * 900000));
   const passwordHash = await bcrypt.hash(plainPassword, 10);
-  const { data: teacher } = await supabase.from('users').update({ password_hash: passwordHash }).eq('id', id).select('full_name, username').single();
+  const { data: teacher } = await supabase
+    .from('users')
+    .update({ password_hash: passwordHash, plain_password: plainPassword })
+    .eq('id', id)
+    .select('full_name, username')
+    .single();
   res.json({ fullName: teacher.full_name, username: teacher.username, plainPassword });
 });
 
@@ -172,6 +295,10 @@ app.get('/api/announcement/active', authenticate, checkConfig, async (req, res) 
   const { data } = await supabase.from('announcements').select('*').eq('is_active', true).order('created_at', { ascending: false }).limit(1).single();
   res.json(data || null);
 });
+
+// ==========================================
+// AI LESSONS, TUTOR & QUIZ ROUTES
+// ==========================================
 
 app.post('/api/lessons/generate', authenticate, checkConfig, upload.single('file'), async (req, res) => {
   try {
@@ -203,7 +330,20 @@ app.post('/api/lessons/generate', authenticate, checkConfig, upload.single('file
     });
     const parsed = JSON.parse(response.text);
     const enrichedFlashcards = parsed.flashcards.map((fc, idx) => ({ id: idx + 1, ...fc, interval: 1 }));
-    const { data: savedLesson, error } = await supabase.from('lessons').insert({ creator_id: req.user.id, group_id: groupId || null, title: title || parsed.title, summary: parsed.summary, flashcards: enrichedFlashcards, quiz: parsed.quiz, podcast_script: parsed.podcast_script }).select().single();
+    const { data: savedLesson, error } = await supabase
+      .from('lessons')
+      .insert({
+        creator_id: req.user.id,
+        group_id: groupId || null,
+        title: title || parsed.title,
+        summary: parsed.summary,
+        flashcards: enrichedFlashcards,
+        quiz: parsed.quiz,
+        podcast_script: parsed.podcast_script
+      })
+      .select()
+      .single();
+
     if (error) throw error;
     const { data: u } = await supabase.from('users').select('ai_requests_count').eq('id', req.user.id).single();
     await supabase.from('users').update({ ai_requests_count: (u?.ai_requests_count || 0) + 1 }).eq('id', req.user.id);
@@ -226,7 +366,10 @@ app.post('/api/ai/tutor', authenticate, async (req, res) => {
   try {
     if (!ai) return res.status(500).json({ error: 'GEMINI_API_KEY sozlanmagan!' });
     const { question, options, userAnswerIndex, correctIndex } = req.body;
-    const response = await generateWithRetry({ model: 'gemini-3.8-flash', contents: `Savol: "${question}". O'quvchi tanlagan: "${options[userAnswerIndex]}". To'g'ri javob: "${options[correctIndex]}". 3-4 gapda oddiy hayotiy misol bilan o'zbek tilida tushuntir.` });
+    const response = await generateWithRetry({
+      model: 'gemini-3.8-flash',
+      contents: `Savol: "${question}". O'quvchi tanlagan: "${options[userAnswerIndex]}". To'g'ri javob: "${options[correctIndex]}". 3-4 gapda oddiy hayotiy misol bilan o'zbek tilida tushuntir.`
+    });
     res.json({ explanation: response.text });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -236,11 +379,23 @@ app.post('/api/ai/tutor', authenticate, async (req, res) => {
 app.post('/api/ai/weakness-detector', authenticate, checkConfig, async (req, res) => {
   try {
     if (!ai) return res.status(500).json({ error: 'GEMINI_API_KEY sozlanmagan!' });
-    const { data: attempts } = await supabase.from('quiz_attempts').select('wrong_question_indices, lessons(title, quiz)').eq('student_id', req.user.id).order('completed_at', { ascending: false }).limit(5);
+    const { data: attempts } = await supabase
+      .from('quiz_attempts')
+      .select('wrong_question_indices, lessons(title, quiz)')
+      .eq('student_id', req.user.id)
+      .order('completed_at', { ascending: false })
+      .limit(5);
+
     const wrongQuestions = [];
-    (attempts || []).forEach(a => (a.wrong_question_indices || []).forEach(idx => { if (a.lessons?.quiz?.[idx]) wrongQuestions.push({ topic: a.lessons.title, question: a.lessons.quiz[idx].question }); }));
+    (attempts || []).forEach(a => (a.wrong_question_indices || []).forEach(idx => {
+      if (a.lessons?.quiz?.[idx]) wrongQuestions.push({ topic: a.lessons.title, question: a.lessons.quiz[idx].question });
+    }));
+
     if (wrongQuestions.length === 0) return res.json({ analysis: 'Sizda hozircha xato qilingan savollar yo‘q. Ajoyib natija!' });
-    const response = await generateWithRetry({ model: 'gemini-3.8-flash', contents: `Xato savollar: ${JSON.stringify(wrongQuestions)}. O'zbek tilida qisqa tahlil va 2 ta tavsiya ber.` });
+    const response = await generateWithRetry({
+      model: 'gemini-3.8-flash',
+      contents: `Xato savollar: ${JSON.stringify(wrongQuestions)}. O'zbek tilida qisqa tahlil va 2 ta tavsiya ber.`
+    });
     res.json({ analysis: response.text });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -250,7 +405,13 @@ app.post('/api/ai/weakness-detector', authenticate, checkConfig, async (req, res
 app.post('/api/quiz/submit', authenticate, checkConfig, async (req, res) => {
   try {
     const { lessonId, scorePercent, wrongIndices, tabSwitches } = req.body;
-    await supabase.from('quiz_attempts').insert({ student_id: req.user.id, lesson_id: lessonId, score_percent: scorePercent, wrong_question_indices: wrongIndices || [], tab_switches: tabSwitches || 0 });
+    await supabase.from('quiz_attempts').insert({
+      student_id: req.user.id,
+      lesson_id: lessonId,
+      score_percent: scorePercent,
+      wrong_question_indices: wrongIndices || [],
+      tab_switches: tabSwitches || 0
+    });
     const earnedXp = Math.round(scorePercent * 1.5);
     const { data: user } = await supabase.from('users').select('xp_points').eq('id', req.user.id).single();
     const newXp = (user?.xp_points || 0) + earnedXp;
@@ -279,6 +440,10 @@ app.post('/api/tracker/ping', authenticate, checkConfig, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ==========================================
+// TEACHER & PROFILE ROUTES
+// ==========================================
 
 app.get('/api/teacher/groups', authenticate, checkConfig, async (req, res) => {
   const { data, error } = await supabase.from('groups').select('*').eq('teacher_id', req.user.id).order('created_at', { ascending: false });
@@ -385,9 +550,11 @@ app.get('/api/teacher/groups/:groupId/dashboard', authenticate, checkConfig, asy
       .from('users')
       .select('id, full_name, username, plain_password, avatar_url, xp_points, streak_days, is_online, last_seen')
       .eq('group_id', groupId);
+
     const studentIds = (students || []).map(s => s.id);
     const { data: logs } = await supabase.from('study_logs').select('student_id, seconds_spent').in('student_id', studentIds).eq('study_date', today);
     const { data: attempts } = await supabase.from('quiz_attempts').select('student_id, score_percent, tab_switches, wrong_question_indices').in('student_id', studentIds);
+
     const enrichedStudents = (students || []).map(st => {
       const log = (logs || []).find(l => l.student_id === st.id);
       const stAttempts = (attempts || []).filter(a => a.student_id === st.id);
@@ -396,10 +563,16 @@ app.get('/api/teacher/groups/:groupId/dashboard', authenticate, checkConfig, asy
       const isLive = st.is_online && (Date.now() - new Date(st.last_seen).getTime() < 120000);
       return { ...st, isOnline: isLive, minutesToday: Math.floor((log?.seconds_spent || 0) / 60), avgScore, cheatWarnings: totalCheats };
     });
+
     const leaderboard = [...enrichedStudents].sort((a, b) => b.xp_points - a.xp_points).slice(0, 5);
     const errorMap = {};
     (attempts || []).forEach(a => (a.wrong_question_indices || []).forEach(idx => { errorMap[idx] = (errorMap[idx] || 0) + 1; }));
-    const heatmap = Object.entries(errorMap).map(([qIdx, count]) => ({ questionNumber: Number(qIdx) + 1, errorCount: count, errorRate: attempts?.length ? Math.round((count / attempts.length) * 100) : 0 }));
+    const heatmap = Object.entries(errorMap).map(([qIdx, count]) => ({
+      questionNumber: Number(qIdx) + 1,
+      errorCount: count,
+      errorRate: attempts?.length ? Math.round((count / attempts.length) * 100) : 0
+    }));
+
     res.json({ students: enrichedStudents, leaderboard, heatmap });
   } catch (err) {
     res.status(500).json({ error: err.message });
