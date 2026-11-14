@@ -37,7 +37,7 @@ async function generateWithRetry(params) {
     for (let i = 0; i < waits.length; i++) {
       try {
         return await Promise.race([
-          generateWithRetry({ ...params, model }),
+          ai.models.generateContent({ ...params, model }),
           new Promise((_, rej) => setTimeout(() => rej(new Error('vaqt tugadi (timeout)')), 45000))
         ]);
       } catch (err) {
