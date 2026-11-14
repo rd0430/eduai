@@ -160,7 +160,7 @@ app.post('/api/lessons/generate', authenticate, checkConfig, upload.single('file
 
     contents.push(`Ushbu material asosida o'zbek tilida ta'limiy paket yarat: title, summary (5-7 g'oya), flashcards (6 ta q, a), quiz (5 ta 4 variantli test: question, options, correctIndex, explanation), podcast_script ("Ali" va "Laylo" 6-8 replika).`);
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents,
       config: {
         responseMimeType: 'application/json',
@@ -202,7 +202,7 @@ app.post('/api/ai/tutor', authenticate, async (req, res) => {
   try {
     if (!ai) return res.status(500).json({ error: 'GEMINI_API_KEY sozlanmagan!' });
     const { question, options, userAnswerIndex, correctIndex } = req.body;
-    const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: `Savol: "${question}". O'quvchi tanlagan: "${options[userAnswerIndex]}". To'g'ri javob: "${options[correctIndex]}". 3-4 gapda oddiy hayotiy misol bilan o'zbek tilida tushuntir.` });
+    const response = await ai.models.generateContent({ model: 'gemini-3.8-flash', contents: `Savol: "${question}". O'quvchi tanlagan: "${options[userAnswerIndex]}". To'g'ri javob: "${options[correctIndex]}". 3-4 gapda oddiy hayotiy misol bilan o'zbek tilida tushuntir.` });
     res.json({ explanation: response.text });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -216,7 +216,7 @@ app.post('/api/ai/weakness-detector', authenticate, checkConfig, async (req, res
     const wrongQuestions = [];
     (attempts || []).forEach(a => (a.wrong_question_indices || []).forEach(idx => { if (a.lessons?.quiz?.[idx]) wrongQuestions.push({ topic: a.lessons.title, question: a.lessons.quiz[idx].question }); }));
     if (wrongQuestions.length === 0) return res.json({ analysis: 'Sizda hozircha xato qilingan savollar yo‘q. Ajoyib natija!' });
-    const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: `Xato savollar: ${JSON.stringify(wrongQuestions)}. O'zbek tilida qisqa tahlil va 2 ta tavsiya ber.` });
+    const response = await ai.models.generateContent({ model: 'gemini-3.8-flash', contents: `Xato savollar: ${JSON.stringify(wrongQuestions)}. O'zbek tilida qisqa tahlil va 2 ta tavsiya ber.` });
     res.json({ analysis: response.text });
   } catch (err) {
     res.status(500).json({ error: err.message });
