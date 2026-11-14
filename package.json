@@ -1,0 +1,8 @@
+{
+  "name": "eduai-platform",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd eduai-backend && npm install && cd ../eduai-client && npm install && npm run build",
+    "start": "cd eduai-backend && node server.js"
+  }
+}
