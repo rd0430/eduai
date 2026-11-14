@@ -110,7 +110,7 @@ app.post('/api/auth/login', checkConfig, async (req, res) => {
     if (user.last_active_date !== today) streak = user.last_active_date === yesterday ? streak + 1 : 1;
     await supabase.from('users').update({ last_active_date: today, streak_days: streak, is_online: true, last_seen: new Date().toISOString() }).eq('id', user.id);
     const token = jwt.sign({ id: user.id, role: user.role, group_id: user.group_id }, process.env.JWT_SECRET || 'eduai_default_secret', { expiresIn: '7d' });
-    res.json({ token, user: { id: user.id, fullName: user.full_name, subject: user.subject, username: user.username, role: user.role, groupId: user.group_id, xp: user.xp_points, streak } });
+    res.json({ token, user: { id: user.id, fullName: user.full_name, subject: user.subject, username: user.username, role: user.role, groupId: user.group_id, xp: user.xp_points, streak, avatarUrl: user.avatar_url } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -293,6 +293,7 @@ app.post('/api/teacher/groups', authenticate, checkConfig, async (req, res) => {
   res.json(data);
 });
 
+// 1. O'quvchi qo'shish (parolini ustozga ko'rinadigan qilib saqlaydi)
 app.post('/api/teacher/groups/:groupId/students', authenticate, checkConfig, async (req, res) => {
   try {
     const { fullName } = req.body;
@@ -301,9 +302,76 @@ app.post('/api/teacher/groups/:groupId/students', authenticate, checkConfig, asy
     const username = `${cleanFirst}_${Math.floor(100 + Math.random() * 900)}`;
     const plainPassword = String(Math.floor(100000 + Math.random() * 900000));
     const passwordHash = await bcrypt.hash(plainPassword, 10);
-    const { data: student, error } = await supabase.from('users').insert({ role: 'student', full_name: fullName.trim(), username, password_hash: passwordHash, group_id: groupId }).select().single();
+
+    const { data: student, error } = await supabase
+      .from('users')
+      .insert({
+        role: 'student',
+        full_name: fullName.trim(),
+        username,
+        password_hash: passwordHash,
+        plain_password: plainPassword,
+        group_id: groupId
+      })
+      .select()
+      .single();
+
     if (error) throw error;
     res.json({ id: student.id, fullName: student.full_name, username, plainPassword });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. O'quvchi parolini yangilash (Ustoz uchun)
+app.post('/api/teacher/students/:studentId/reset-password', authenticate, checkConfig, async (req, res) => {
+  try {
+    if (req.user.role !== 'teacher') return res.status(403).json({ error: 'Ruxsat yo‘q' });
+    const { studentId } = req.params;
+    const { customPassword } = req.body;
+
+    const newPlainPassword = customPassword?.trim() || String(Math.floor(100000 + Math.random() * 900000));
+    const passwordHash = await bcrypt.hash(newPlainPassword, 10);
+
+    const { data: updated, error } = await supabase
+      .from('users')
+      .update({ password_hash: passwordHash, plain_password: newPlainPassword })
+      .eq('id', studentId)
+      .eq('role', 'student')
+      .select('id, full_name, username, plain_password')
+      .single();
+
+    if (error) throw error;
+    res.json({
+      id: updated.id,
+      fullName: updated.full_name,
+      username: updated.username,
+      plainPassword: updated.plain_password
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. Ustoz va o'quvchi uchun rasm (avatar) yuklash
+app.post('/api/profile/avatar', authenticate, checkConfig, upload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Rasm tanlanmadi' });
+    if (!req.file.mimetype.startsWith('image/')) {
+      return res.status(400).json({ error: 'Faqat rasm fayli (JPG, PNG) yuklang' });
+    }
+    if (req.file.size > 2 * 1024 * 1024) {
+      return res.status(400).json({ error: 'Rasm 2 MB dan kichik bo‘lsin' });
+    }
+
+    const avatarDataUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    const { error } = await supabase
+      .from('users')
+      .update({ avatar_url: avatarDataUrl })
+      .eq('id', req.user.id);
+
+    if (error) throw error;
+    res.json({ avatarUrl: avatarDataUrl });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -313,7 +381,10 @@ app.get('/api/teacher/groups/:groupId/dashboard', authenticate, checkConfig, asy
   try {
     const { groupId } = req.params;
     const today = new Date().toISOString().split('T')[0];
-    const { data: students } = await supabase.from('users').select('id, full_name, username, xp_points, streak_days, is_online, last_seen').eq('group_id', groupId);
+    const { data: students } = await supabase
+      .from('users')
+      .select('id, full_name, username, plain_password, avatar_url, xp_points, streak_days, is_online, last_seen')
+      .eq('group_id', groupId);
     const studentIds = (students || []).map(s => s.id);
     const { data: logs } = await supabase.from('study_logs').select('student_id, seconds_spent').in('student_id', studentIds).eq('study_date', today);
     const { data: attempts } = await supabase.from('quiz_attempts').select('student_id, score_percent, tab_switches, wrong_question_indices').in('student_id', studentIds);

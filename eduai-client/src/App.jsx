@@ -93,6 +93,60 @@ function EduAIApp() {
       clearInterval(interval);
     };
   }, [token, user, activeTab, currentLesson, quizSubmitted]);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+const handleAvatarUpload = async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  setIsUploadingAvatar(true);
+  try {
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    const res = await fetch(`${API_URL}/profile/avatar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Rasm yuklashda xatolik');
+
+    const updatedUser = { ...user, avatarUrl: data.avatarUrl };
+    setUser(updatedUser);
+    localStorage.setItem('eduai_user', JSON.stringify(updatedUser));
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    setIsUploadingAvatar(false);
+  }
+};
+
+const handleResetStudentPassword = async (studentId, studentName) => {
+  const custom = window.prompt(
+    `${studentName} uchun yangi parol yozing (avtomatik 6 xonali parol uchun bo'sh qoldirib OK bosing):`
+  );
+  if (custom === null) return;
+
+  try {
+    const res = await fetch(`${API_URL}/teacher/students/${studentId}/reset-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ customPassword: custom }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Parolni yangilashda xatolik');
+
+    alert(`Yangi parol saqlandi!\nLogin: ${data.username}\nParol: ${data.plainPassword}`);
+    // Guruh ma'lumotlarini qayta yuklash (sizdagi guruh yuklash funksiyasi nomi):
+    if (selectedGroup) loadGroupDashboard(selectedGroup.id);
+  } catch (err) {
+    alert(err.message);
+  }
+};
 
   useEffect(() => {
     if (!token || !user) return;
@@ -666,6 +720,8 @@ function EduAIApp() {
                       <tr>
                         <th className="p-4">O‘quvchi</th>
                         <th className="p-4">Login</th>
+                        <th className="p-4 text-left">Parol</th>
+                        <th className="p-4 text-left">Amal</th>
                         <th className="p-4">Holati</th>
                         <th className="p-4">Bugungi dars</th>
                         <th className="p-4">O‘rtacha ball</th>
@@ -675,6 +731,8 @@ function EduAIApp() {
                     <tbody className="divide-y divide-slate-100">
                       {groupStats.students.map(st => (
                         <tr key={st.id}>
+                          <td className="p-4 font-semibold text-slate-800">{st.full_name}</td>
+                          <td className="p-4 font-mono text-slate-600">{st.username}</td>
                           <td className="p-4 font-semibold text-slate-800">{st.full_name}</td>
                           <td className="p-4 font-mono text-slate-600">{st.username}</td>
                           <td className="p-4">
@@ -786,10 +844,35 @@ function EduAIApp() {
 
         <main className="flex-1 p-8 overflow-y-auto">
           <div className="flex justify-between items-center mb-8">
-            <div>
-              <h1 className="text-xl font-bold text-slate-800">Salom, {user.fullName}!</h1>
-              <p className="text-xs text-slate-500">Bugungi o‘qish rejangizni davom ettiring</p>
-            </div>
+           <div className="flex items-center gap-3">
+  <label className="cursor-pointer relative group" title="Rasm qo‘shish / o‘zgartirish">
+    {user?.avatarUrl ? (
+      <img
+        src={user.avatarUrl}
+        alt="Avatar"
+        className="w-12 h-12 rounded-full object-cover border-2 border-blue-500"
+      />
+    ) : (
+      <div className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-lg">
+        {user?.fullName?.[0]?.toUpperCase() || 'U'}
+      </div>
+    )}
+    <span className="block text-[10px] text-center text-blue-600 mt-0.5">
+      {isUploadingAvatar ? 'Yuklanmoqda...' : 'Rasm'}
+    </span>
+    <input
+      type="file"
+      accept="image/*"
+      onChange={handleAvatarUpload}
+      disabled={isUploadingAvatar}
+      className="hidden"
+    />
+  </label>
+  <div>
+    <h1 className="text-xl font-bold text-slate-800">Salom, {user.fullName}!</h1>
+    <p className="text-xs text-slate-500">Bugungi o‘qish rejangizni davom ettiring</p>
+  </div>
+</div>
             <div className="flex items-center gap-3">
               <div className="bg-white border border-slate-200 px-3.5 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold text-orange-600">
                 <Flame className="w-4 h-4" /> {user.streak} kun
