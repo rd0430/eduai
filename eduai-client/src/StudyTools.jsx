@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { Calculator, LineChart, Atom, Delete, RotateCcw, Search, Info } from 'lucide-react';
+import { Calculator, LineChart, Atom, RotateCcw, Search, Info } from 'lucide-react';
 
-// Barcha 118 ta kimyoviy elementlar ma'lumoti: [raqam, belgi, nomi, massa, qator(row), ustun(col), toifa]
-const ELEMENTS_RAW: [number, string, string, string, number, number, string][] = [
+const ELEMENTS_RAW = [
   [1, 'H', 'Vodorod', '1.008', 1, 1, 'nonmetal'],
   [2, 'He', 'Geliy', '4.0026', 1, 18, 'noble'],
   [3, 'Li', 'Litiy', '6.94', 2, 1, 'alkali'],
@@ -123,7 +122,7 @@ const ELEMENTS_RAW: [number, string, string, string, number, number, string][] =
   [118, 'Og', 'Oganeson', '(294)', 7, 18, 'noble'],
 ];
 
-const CATEGORY_STYLES: Record<string, { bg: string; label: string }> = {
+const CATEGORY_STYLES = {
   alkali: { bg: 'bg-red-100 border-red-300 text-red-900', label: 'Ishqoriy metallar' },
   alkaline: { bg: 'bg-orange-100 border-orange-300 text-orange-900', label: 'Ishqoriy-yer metallar' },
   transition: { bg: 'bg-amber-100 border-amber-300 text-amber-900', label: 'Oraliq metallar' },
@@ -136,26 +135,14 @@ const CATEGORY_STYLES: Record<string, { bg: string; label: string }> = {
   actinide: { bg: 'bg-rose-100 border-rose-300 text-rose-900', label: 'Aktinoidlar' },
 };
 
-// ==========================================
-// 1. ODDIY & ILMIY KALKULYATOR
-// ==========================================
 function StandardCalculator() {
   const [expr, setExpr] = useState('');
   const [result, setResult] = useState('0');
-  const [history, setHistory] = useState<string[]>([]);
+  const [history, setHistory] = useState([]);
 
-  const handlePress = (val: string) => {
-    setExpr(prev => prev + val);
-  };
-
-  const handleClear = () => {
-    setExpr('');
-    setResult('0');
-  };
-
-  const handleBackspace = () => {
-    setExpr(prev => prev.slice(0, -1));
-  };
+  const handlePress = (val) => setExpr(prev => prev + val);
+  const handleClear = () => { setExpr(''); setResult('0'); };
+  const handleBackspace = () => setExpr(prev => prev.slice(0, -1));
 
   const handleCalculate = () => {
     if (!expr.trim()) return;
@@ -171,7 +158,6 @@ function StandardCalculator() {
         .replace(/log\(/g, 'Math.log10(')
         .replace(/\^/g, '**');
 
-      // Xavfsiz matematik hisoblash
       const evalResult = Function(`"use strict"; return (${sanitized})`)();
       const formatted = Number.isFinite(evalResult)
         ? String(Math.round(evalResult * 1e10) / 1e10)
@@ -221,7 +207,6 @@ function StandardCalculator() {
   return (
     <div className="grid md:grid-cols-3 gap-6">
       <div className="md:col-span-2 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-        {/* Displey */}
         <div className="bg-slate-900 text-white p-4 sm:p-5 rounded-2xl text-right space-y-1">
           <div className="text-xs sm:text-sm text-slate-400 font-mono min-h-[20px] break-all">
             {expr || '0'}
@@ -231,7 +216,6 @@ function StandardCalculator() {
           </div>
         </div>
 
-        {/* Ilmiy tugmalar */}
         <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
           {sciButtons.map((b, i) => (
             <button
@@ -244,7 +228,6 @@ function StandardCalculator() {
           ))}
         </div>
 
-        {/* Asosiy tugmalar */}
         <div className="grid grid-cols-4 gap-2">
           {mainButtons.map((btn, idx) => (
             <button
@@ -260,7 +243,6 @@ function StandardCalculator() {
         </div>
       </div>
 
-      {/* Hisob-kitoblar tarixi */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="font-bold text-slate-800 text-sm">Hisoblash tarixi</h3>
@@ -293,9 +275,6 @@ function StandardCalculator() {
   );
 }
 
-// ==========================================
-// 2. DESMOS GRAFIK KALKULYATOR
-// ==========================================
 function DesmosCalculator() {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
@@ -320,9 +299,6 @@ function DesmosCalculator() {
   );
 }
 
-// ==========================================
-// 3. KIMYOVIY ELEMENTLAR DAVRIY JADVALI
-// ==========================================
 function PeriodicTable() {
   const [selectedEl, setSelectedEl] = useState(ELEMENTS_RAW[0]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -343,7 +319,6 @@ function PeriodicTable() {
 
   return (
     <div className="space-y-4">
-      {/* Qidiruv va Tanlangan Element Kartochkasi */}
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 space-y-3">
           <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Element qidirish</label>
@@ -366,7 +341,6 @@ function PeriodicTable() {
           </div>
         </div>
 
-        {/* Tanlangan element tafsiloti */}
         <div className="lg:col-span-2 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 flex items-center gap-4 sm:gap-6">
           <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-2xl border-2 flex flex-col items-center justify-center shrink-0 ${selectedCategory.bg}`}>
             <span className="text-xs font-bold">{selectedEl[0]}</span>
@@ -390,7 +364,6 @@ function PeriodicTable() {
         </div>
       </div>
 
-      {/* Davriy jadval panjarasi (Telefonda gorizontal suriladi) */}
       <div className="bg-white p-3 sm:p-5 rounded-2xl border border-slate-200 overflow-x-auto">
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs font-semibold text-slate-500 flex items-center gap-1">
@@ -428,7 +401,6 @@ function PeriodicTable() {
             );
           })}
 
-          {/* Lantanoid va Aktinoid ko'rsatkichlari */}
           <div style={{ gridRow: 6, gridColumn: 3 }} className="p-1 rounded-lg border border-dashed border-pink-300 bg-pink-50/50 text-pink-700 flex flex-col items-center justify-center text-[9px] font-bold">
             <span>57-71</span>
             <span>La-Lu</span>
@@ -443,11 +415,8 @@ function PeriodicTable() {
   );
 }
 
-// ==========================================
-// ASOSIY WRAPPER KOMPONENT
-// ==========================================
 export default function StudyTools() {
-  const [toolTab, setToolTab] = useState<'calc' | 'desmos' | 'periodic'>('calc');
+  const [toolTab, setToolTab] = useState('calc');
 
   return (
     <div className="max-w-6xl mx-auto space-y-5">

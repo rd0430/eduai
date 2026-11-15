@@ -49,7 +49,7 @@ function EduAIApp() {
   const [minutesToday, setMinutesToday] = useState(0);
 
   // Teacher states
-  const [teacherView, setTeacherView] = useState<'groups' | 'tools'>('groups');
+  const [teacherView, setTeacherView] = useState('groups');
   const [groups, setGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [newGroupName, setNewGroupName] = useState('');
@@ -642,7 +642,7 @@ function EduAIApp() {
   }
 
   // ==========================================
-  // 3. TEACHER PANEL (WITH STUDY TOOLS)
+  // 3. TEACHER PANEL
   // ==========================================
   if (user.role === 'teacher') {
     return (
@@ -653,7 +653,6 @@ function EduAIApp() {
           </div>
         )}
 
-        {/* Mobile Header (Teacher) */}
         <header className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-2 text-blue-600 font-bold text-lg">
             <BookOpen className="w-6 h-6" /> EduAI Ustoz
@@ -684,7 +683,6 @@ function EduAIApp() {
             />
           )}
 
-          {/* Sidebar / Mobile Drawer */}
           <aside
             className={`fixed lg:static inset-y-0 left-0 z-40 w-72 lg:w-64 bg-white border-r border-slate-200 p-5 flex flex-col justify-between transform transition-transform duration-200 ease-in-out ${
               mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
@@ -696,7 +694,6 @@ function EduAIApp() {
               </div>
               <p className="text-xs text-slate-500 mb-5 font-mono">Login: {user.username}</p>
 
-              {/* Ustoz Asboblari Tugmasi */}
               <button
                 onClick={() => { setTeacherView('tools'); setMobileMenuOpen(false); }}
                 className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 mb-4 transition ${
@@ -825,7 +822,6 @@ function EduAIApp() {
                   </div>
                 </div>
 
-                {/* O'quvchilar jadvali */}
                 <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
                   <div className="p-4 border-b border-slate-100 flex justify-between items-center">
                     <span className="font-bold text-slate-800 text-sm sm:text-base">O‘quvchilar ro‘yxati ({groupStats.students.length} ta)</span>
@@ -933,7 +929,6 @@ function EduAIApp() {
           </main>
         </div>
 
-        {/* O'qituvchi parol o'zgartirish modali */}
         {showProfileModal && (
           <div
             onClick={() => setShowProfileModal(false)}
@@ -990,7 +985,7 @@ function EduAIApp() {
   }
 
   // ==========================================
-  // 4. STUDENT PANEL (WITH STUDY TOOLS)
+  // 4. STUDENT PANEL
   // ==========================================
   const studentNavItems = [
     { id: 'new', label: 'Yangi dars', icon: Plus },
@@ -1014,7 +1009,6 @@ function EduAIApp() {
         </div>
       )}
 
-      {/* Mobile Top Bar (Student) */}
       <header className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-2 text-blue-600 font-bold text-lg">
           <BookOpen className="w-6 h-6" /> EduAI
@@ -1025,7 +1019,6 @@ function EduAIApp() {
       </header>
 
       <div className="flex flex-1">
-        {/* Desktop Sidebar (Student) */}
         <aside className="hidden lg:flex w-64 bg-white border-r border-slate-200 p-5 flex-col justify-between">
           <div>
             <div className="flex items-center gap-2 text-blue-600 font-bold text-xl mb-8">
@@ -1051,7 +1044,6 @@ function EduAIApp() {
         </aside>
 
         <main className="flex-1 p-4 sm:p-8 overflow-y-auto w-full">
-          {/* Profile Header & Stats Badges */}
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6 sm:mb-8">
             <div className="flex items-center gap-3">
               <button
@@ -1080,7 +1072,6 @@ function EduAIApp() {
               </div>
             </div>
 
-            {/* Stats Badges */}
             <div className="grid grid-cols-3 sm:flex items-center gap-2 sm:gap-3">
               <div className="bg-white border border-slate-200 px-2.5 sm:px-3.5 py-2 rounded-xl flex items-center justify-center gap-1.5 text-xs sm:text-sm font-semibold text-orange-600">
                 <Flame className="w-4 h-4 shrink-0" /> <span>{user.streak} kun</span>
@@ -1135,7 +1126,6 @@ function EduAIApp() {
                     </button>
                   </div>
 
-                  {/* Lesson Tabs */}
                   <div className="grid grid-cols-2 sm:flex gap-1.5 sm:gap-2 bg-white p-1.5 rounded-xl border border-slate-200">
                     {[
                       { id: 'summary', label: 'Qisqa konspekt' },
@@ -1338,7 +1328,6 @@ function EduAIApp() {
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar (Student) */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 flex justify-around items-center py-2 px-1 z-30">
         {studentNavItems.map(item => (
           <button
@@ -1354,7 +1343,6 @@ function EduAIApp() {
         ))}
       </nav>
 
-      {/* O'QUVCHI PROFILI VA KATTALASHGAN RASM MODALI */}
       {showProfileModal && (
         <div
           onClick={() => setShowProfileModal(false)}
