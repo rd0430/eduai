@@ -82,7 +82,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // ==========================================
-// AUTHENTICATION
+// 1. AUTHENTICATION & PASSWORD MANAGEMENT
 // ==========================================
 
 app.post('/api/auth/google-admin', async (req, res) => {
@@ -207,7 +207,7 @@ app.post('/api/auth/logout', authenticate, async (req, res) => {
 });
 
 // ==========================================
-// SUPER ADMIN ROUTES
+// 2. SUPER ADMIN ROUTES
 // ==========================================
 
 app.get('/api/admin/overview', authenticate, requireAdmin, checkConfig, async (req, res) => {
@@ -297,19 +297,46 @@ app.get('/api/announcement/active', authenticate, checkConfig, async (req, res) 
 });
 
 // ==========================================
-// AI LESSONS, TUTOR & QUIZ ROUTES
+// 3. AI LESSONS (MAJBURIY IZOH + TIL TANLASH)
 // ==========================================
 
 app.post('/api/lessons/generate', authenticate, checkConfig, upload.single('file'), async (req, res) => {
   try {
     if (!ai) return res.status(500).json({ error: 'GEMINI_API_KEY kiritilmagan!' });
-    const { text, title, groupId } = req.body;
-    const contents = [];
-    if (req.file) contents.push({ inlineData: { data: req.file.buffer.toString('base64'), mimeType: req.file.mimetype } });
-    else if (text) contents.push(text);
-    else return res.status(400).json({ error: 'PDF, rasm yoki matn yuboring' });
+    const { text, title, groupId, instruction, language = "O'zbek tili" } = req.body;
 
-    contents.push(`Ushbu material asosida o'zbek tilida ta'limiy paket yarat: title, summary (5-7 g'oya), flashcards (6 ta q, a), quiz (5 ta 4 variantli test: question, options, correctIndex, explanation), podcast_script ("Ali" va "Laylo" 6-8 replika).`);
+    if (!instruction || !instruction.trim()) {
+      return res.status(400).json({ error: 'Iltimos, AI uchun izoh (ko‘rsatma) kiriting!' });
+    }
+
+    const contents = [];
+    if (req.file) {
+      contents.push({
+        inlineData: {
+          data: req.file.buffer.toString('base64'),
+          mimeType: req.file.mimetype
+        }
+      });
+    }
+    if (text && text.trim()) {
+      contents.push(`Asosiy matn:\n${text.trim()}`);
+    }
+    if (contents.length === 0) {
+      return res.status(400).json({ error: 'PDF, rasm yoki matn yuboring' });
+    }
+
+    contents.push(`
+Foydalanuvchi ko'rsatmasi (izohi): "${instruction.trim()}"
+Natija tili: ${language}
+
+Ushbu material va foydalanuvchi ko'rsatmasi asosida FAQAT "${language}" tilida ta'limiy paket yarat:
+- title: Mavzu sarlavhasi (${language} tilida)
+- summary: 5-7 ta asosiy g'oya (${language} tilida)
+- flashcards: 6 ta savol-javob kartochkasi (q va a, ${language} tilida)
+- quiz: 5 ta 4 variantli test savoli (question, options, correctIndex, explanation — barchasi ${language} tilida)
+- podcast_script: "Ali" va "Laylo" o'rtasida 6-8 replikali qiziqarli suhbat (${language} tilida)
+`);
+
     const response = await generateWithRetry({
       model: 'gemini-3.8-flash',
       contents,
@@ -320,20 +347,66 @@ app.post('/api/lessons/generate', authenticate, checkConfig, upload.single('file
           properties: {
             title: { type: Type.STRING },
             summary: { type: Type.ARRAY, items: { type: Type.STRING } },
-            flashcards: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { q: { type: Type.STRING }, a: { type: Type.STRING } }, required: ['q', 'a'] } },
-            quiz: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { question: { type: Type.STRING }, options: { type: Type.ARRAY, items: { type: Type.STRING } }, correctIndex: { type: Type.INTEGER }, explanation: { type: Type.STRING } }, required: ['question', 'options', 'correctIndex', 'explanation'] } },
-            podcast_script: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { speaker: { type: Type.STRING }, text: { type: Type.STRING } }, required: ['speaker', 'text'] } }
+            flashcards: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: { q: { type: Type.STRING }, a: { type: Type.STRING } },
+                required: ['q', 'a']
+              }
+            },
+            quiz: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  question: { type: Type.STRING },
+                  options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  correctIndex: { type: Type.INTEGER },
+                  explanation: { type: Type.STRING }
+                },
+                required: ['question', 'options', 'correctIndex', 'explanation']
+              }
+            },
+            podcast_script: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: { speaker: { type: Type.STRING }, text: { type: Type.STRING } },
+                required: ['speaker', 'text']
+              }
+            }
           },
           required: ['title', 'summary', 'flashcards', 'quiz', 'podcast_script']
         }
       }
     });
+
     const parsed = JSON.parse(response.text);
     const enrichedFlashcards = parsed.flashcards.map((fc, idx) => ({ id: idx + 1, ...fc, interval: 1 }));
+
+    // Foydalanuvchi bazada mavjudligini tekshirish (foreign key xatosini oldini olish uchun)
+    let validCreatorId = null;
+    if (req.user.id && req.user.id !== 'super_admin') {
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id, ai_requests_count')
+        .eq('id', req.user.id)
+        .single();
+
+      if (existingUser) {
+        validCreatorId = existingUser.id;
+        await supabase
+          .from('users')
+          .update({ ai_requests_count: (existingUser.ai_requests_count || 0) + 1 })
+          .eq('id', existingUser.id);
+      }
+    }
+
     const { data: savedLesson, error } = await supabase
       .from('lessons')
       .insert({
-        creator_id: req.user.id,
+        creator_id: validCreatorId,
         group_id: groupId || null,
         title: title || parsed.title,
         summary: parsed.summary,
@@ -345,8 +418,6 @@ app.post('/api/lessons/generate', authenticate, checkConfig, upload.single('file
       .single();
 
     if (error) throw error;
-    const { data: u } = await supabase.from('users').select('ai_requests_count').eq('id', req.user.id).single();
-    await supabase.from('users').update({ ai_requests_count: (u?.ai_requests_count || 0) + 1 }).eq('id', req.user.id);
     res.json(savedLesson);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -368,7 +439,7 @@ app.post('/api/ai/tutor', authenticate, async (req, res) => {
     const { question, options, userAnswerIndex, correctIndex } = req.body;
     const response = await generateWithRetry({
       model: 'gemini-3.8-flash',
-      contents: `Savol: "${question}". O'quvchi tanlagan: "${options[userAnswerIndex]}". To'g'ri javob: "${options[correctIndex]}". 3-4 gapda oddiy hayotiy misol bilan o'zbek tilida tushuntir.`
+      contents: `Savol: "${question}". O'quvchi tanlagan: "${options[userAnswerIndex]}". To'g'ri javob: "${options[correctIndex]}". 3-4 gapda oddiy hayotiy misol bilan savol berilgan tilda tushuntir.`
     });
     res.json({ explanation: response.text });
   } catch (err) {
@@ -442,7 +513,7 @@ app.post('/api/tracker/ping', authenticate, checkConfig, async (req, res) => {
 });
 
 // ==========================================
-// TEACHER & PROFILE ROUTES
+// 4. TEACHER & PROFILE ROUTES
 // ==========================================
 
 app.get('/api/teacher/groups', authenticate, checkConfig, async (req, res) => {
@@ -458,7 +529,6 @@ app.post('/api/teacher/groups', authenticate, checkConfig, async (req, res) => {
   res.json(data);
 });
 
-// 1. O'quvchi qo'shish (parolini ustozga ko'rinadigan qilib saqlaydi)
 app.post('/api/teacher/groups/:groupId/students', authenticate, checkConfig, async (req, res) => {
   try {
     const { fullName } = req.body;
@@ -488,7 +558,6 @@ app.post('/api/teacher/groups/:groupId/students', authenticate, checkConfig, asy
   }
 });
 
-// 2. O'quvchi parolini yangilash (Ustoz uchun)
 app.post('/api/teacher/students/:studentId/reset-password', authenticate, checkConfig, async (req, res) => {
   try {
     if (req.user.role !== 'teacher') return res.status(403).json({ error: 'Ruxsat yo‘q' });
@@ -518,7 +587,6 @@ app.post('/api/teacher/students/:studentId/reset-password', authenticate, checkC
   }
 });
 
-// 3. Ustoz va o'quvchi uchun rasm (avatar) yuklash
 app.post('/api/profile/avatar', authenticate, checkConfig, upload.single('avatar'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Rasm tanlanmadi' });

@@ -4,7 +4,8 @@ import {
   BookOpen, Upload, FileText, CheckCircle2, XCircle, Sparkles,
   Users, Plus, Copy, Check, Clock, Flame, Trophy, Volume2, Square,
   AlertTriangle, Download, LogOut, BarChart3, Send, ShieldAlert,
-  ShieldCheck, KeyRound, Ban, Megaphone, Cpu, X, Camera, Lock, Menu, Calculator
+  ShieldCheck, KeyRound, Ban, Megaphone, Cpu, X, Camera, Lock, Menu,
+  Calculator, Moon, Sun
 } from 'lucide-react';
 import StudyTools from './StudyTools';
 
@@ -12,13 +13,29 @@ const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://l
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 function EduAIApp() {
+  // Dark mode state (localStorage yoki Telegram mavzusidan oladi)
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('eduai_dark_mode');
+    if (saved !== null) return saved === 'true';
+    if (window.Telegram?.WebApp?.colorScheme === 'dark') return true;
+    return false;
+  });
+
   useEffect(() => {
-  if (window.Telegram?.WebApp) {
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand(); // Mini App'ni to'liq ekranga ochadi
-  }
-}, []);
+    const root = document.documentElement;
+    if (darkMode) root.classList.add('dark');
+    else root.classList.remove('dark');
+    localStorage.setItem('eduai_dark_mode', String(darkMode));
+  }, [darkMode]);
+
+  useEffect(() => {
+    if (window.Telegram?.WebApp) {
+      const tg = window.Telegram.WebApp;
+      tg.ready();
+      tg.expand();
+    }
+  }, []);
+
   const [token, setToken] = useState(localStorage.getItem('eduai_token') || '');
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('eduai_user') || 'null'));
   const [announcement, setAnnouncement] = useState(null);
@@ -42,6 +59,8 @@ function EduAIApp() {
   const [activeTab, setActiveTab] = useState('summary');
   const [inputText, setInputText] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
+  const [lessonInstruction, setLessonInstruction] = useState('');
+  const [lessonLanguage, setLessonLanguage] = useState("O'zbek tili");
   const [loadingAI, setLoadingAI] = useState(false);
 
   const [cardIndex, setCardIndex] = useState(0);
@@ -66,6 +85,8 @@ function EduAIApp() {
   const [groupStats, setGroupStats] = useState({ students: [], leaderboard: [], heatmap: [] });
   const [assignTitle, setAssignTitle] = useState('');
   const [assignText, setAssignText] = useState('');
+  const [assignInstruction, setAssignInstruction] = useState('');
+  const [assignLanguage, setAssignLanguage] = useState("O'zbek tili");
 
   // Mobile Menu & Profile Modal states
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -130,6 +151,20 @@ function EduAIApp() {
       });
     }
   }, [token, user]);
+
+  const ThemeToggleBtn = ({ compact = false }) => (
+    <button
+      type="button"
+      onClick={() => setDarkMode(prev => !prev)}
+      className={`flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition ${
+        compact ? 'p-2' : 'px-3 py-2 text-xs sm:text-sm font-semibold'
+      }`}
+      title={darkMode ? "Yorug' rejimga o'tish" : "Qorong'i rejimga o'tish"}
+    >
+      {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
+      {!compact && <span>{darkMode ? 'Yorug‘' : 'Tungi'}</span>}
+    </button>
+  );
 
   const handleAvatarUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -295,10 +330,32 @@ function EduAIApp() {
   };
 
   const handleGenerateLesson = async (targetGroupId = null) => {
+    const activeInstruction = targetGroupId ? assignInstruction : lessonInstruction;
+    const activeLanguage = targetGroupId ? assignLanguage : lessonLanguage;
+    const activeText = targetGroupId ? assignText : inputText;
+
+    if (!activeInstruction.trim()) {
+      alert('Iltimos, AI uchun izoh (ko‘rsatma) yozing! Bu maydon majburiy.');
+      return;
+    }
+
+    if (!targetGroupId && !selectedFile && !activeText.trim()) {
+      alert('Iltimos, kamida bitta PDF, rasm yoki dars matnini kiriting!');
+      return;
+    }
+
+    if (targetGroupId && !activeText.trim()) {
+      alert('Iltimos, vazifa matnini kiriting!');
+      return;
+    }
+
     setLoadingAI(true);
     try {
       const formData = new FormData();
-      if (selectedFile) formData.append('file', selectedFile);
+      if (!targetGroupId && selectedFile) formData.append('file', selectedFile);
+      formData.append('instruction', activeInstruction.trim());
+      formData.append('language', activeLanguage);
+
       if (targetGroupId) {
         formData.append('text', assignText);
         formData.append('title', assignTitle);
@@ -312,8 +369,12 @@ function EduAIApp() {
         alert(`"${lesson.title}" vazifasi guruhga yuborildi!`);
         setAssignTitle('');
         setAssignText('');
+        setAssignInstruction('');
       } else {
         setLessons(prev => [lesson, ...prev]);
+        setLessonInstruction('');
+        setSelectedFile(null);
+        setInputText('');
         openLesson(lesson);
       }
     } catch (err) {
@@ -424,7 +485,11 @@ function EduAIApp() {
   // ==========================================
   if (!token || !user) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4 relative">
+        <div className="absolute top-4 right-4">
+          <ThemeToggleBtn />
+        </div>
+
         <div className="max-w-md w-full bg-white rounded-2xl shadow-lg border border-slate-200 p-6 sm:p-8">
           <div className="flex items-center justify-center gap-2 text-blue-600 font-bold text-2xl mb-6">
             <BookOpen className="w-8 h-8" /> EduAI
@@ -498,7 +563,7 @@ function EduAIApp() {
   // ==========================================
   if (user.role === 'admin') {
     return (
-      <div className="min-h-screen bg-slate-50">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
         <header className="bg-white border-b border-slate-200 px-4 sm:px-8 py-3.5 sm:py-4 flex justify-between items-center sticky top-0 z-30">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <ShieldCheck className="w-6 h-6 sm:w-7 sm:h-7 text-blue-600 shrink-0" />
@@ -507,9 +572,12 @@ function EduAIApp() {
               <p className="text-[11px] sm:text-xs text-slate-500 truncate">{user.username}</p>
             </div>
           </div>
-          <button onClick={handleLogout} className="flex items-center gap-1.5 text-xs sm:text-sm text-slate-600 hover:text-red-600 shrink-0 px-2.5 py-1.5 rounded-lg hover:bg-red-50">
-            <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Chiqish</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <ThemeToggleBtn compact />
+            <button onClick={handleLogout} className="flex items-center gap-1.5 text-xs sm:text-sm text-slate-600 hover:text-red-600 shrink-0 px-2.5 py-1.5 rounded-lg hover:bg-red-50">
+              <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Chiqish</span>
+            </button>
+          </div>
         </header>
 
         <main className="max-w-6xl mx-auto p-4 sm:p-8 space-y-6 sm:space-y-8">
@@ -653,7 +721,7 @@ function EduAIApp() {
   // ==========================================
   if (user.role === 'teacher') {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col">
         {announcement && (
           <div className="bg-blue-600 text-white text-xs font-semibold py-2 px-4 text-center flex items-center justify-center gap-2">
             <Megaphone className="w-4 h-4 shrink-0" /> <span>{announcement.message}</span>
@@ -665,6 +733,7 @@ function EduAIApp() {
             <BookOpen className="w-6 h-6" /> EduAI Ustoz
           </div>
           <div className="flex items-center gap-1.5">
+            <ThemeToggleBtn compact />
             <button
               onClick={() => { setTeacherView(teacherView === 'tools' ? 'groups' : 'tools'); setMobileMenuOpen(false); }}
               className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 ${
@@ -696,8 +765,11 @@ function EduAIApp() {
             }`}
           >
             <div>
-              <div className="hidden lg:flex items-center gap-2 text-blue-600 font-bold text-xl mb-2">
-                <BookOpen className="w-6 h-6" /> EduAI Ustoz
+              <div className="hidden lg:flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 text-blue-600 font-bold text-xl">
+                  <BookOpen className="w-6 h-6" /> EduAI Ustoz
+                </div>
+                <ThemeToggleBtn compact />
               </div>
               <p className="text-xs text-slate-500 mb-5 font-mono">Login: {user.username}</p>
 
@@ -803,6 +875,7 @@ function EduAIApp() {
                     )}
                   </div>
 
+                  {/* Guruhga AI Uyga Vazifa yuborish (Majburiy izoh + Til tanlash) */}
                   <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 space-y-3">
                     <h2 className="font-semibold text-slate-800 text-sm sm:text-base">Guruhga AI Uyga Vazifa yuborish</h2>
                     <input
@@ -819,6 +892,26 @@ function EduAIApp() {
                       onChange={e => setAssignText(e.target.value)}
                       className="w-full px-3.5 py-2.5 border rounded-xl text-base sm:text-sm"
                     />
+                    <div className="grid sm:grid-cols-3 gap-2">
+                      <input
+                        type="text"
+                        required
+                        placeholder="Majburiy izoh (masalan: 9-sinf darajasida test tuz) *"
+                        value={assignInstruction}
+                        onChange={e => setAssignInstruction(e.target.value)}
+                        className="sm:col-span-2 px-3.5 py-2.5 border border-slate-300 rounded-xl text-base sm:text-sm"
+                      />
+                      <select
+                        value={assignLanguage}
+                        onChange={e => setAssignLanguage(e.target.value)}
+                        className="px-3 py-2.5 border border-slate-300 rounded-xl bg-white text-base sm:text-sm"
+                      >
+                        <option value="O'zbek tili">O‘zbekcha</option>
+                        <option value="Ingliz tili">Inglizcha</option>
+                        <option value="Rus tili">Ruscha</option>
+                        <option value="Qoraqalpoq tili">Qoraqalpoqcha</option>
+                      </select>
+                    </div>
                     <button
                       disabled={loadingAI}
                       onClick={() => handleGenerateLesson(selectedGroup.id)}
@@ -829,6 +922,7 @@ function EduAIApp() {
                   </div>
                 </div>
 
+                {/* O'quvchilar jadvali */}
                 <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
                   <div className="p-4 border-b border-slate-100 flex justify-between items-center">
                     <span className="font-bold text-slate-800 text-sm sm:text-base">O‘quvchilar ro‘yxati ({groupStats.students.length} ta)</span>
@@ -912,7 +1006,7 @@ function EduAIApp() {
                     ) : (
                       <div className="space-y-2">
                         {groupStats.heatmap.map(h => (
-                          <div key={h.questionNumber} className="flex justify-between items-center p-3 bg-red-50 rounded-xl text-sm">
+                          <div key={h.questionNumber} className="flex justify-between items-center p-3 bg-red-50 dark:bg-red-950/40 rounded-xl text-sm">
                             <span>{h.questionNumber}-savol</span>
                             <span className="font-bold text-red-600">{h.errorRate}% o‘quvchi adashgan</span>
                           </div>
@@ -1009,27 +1103,35 @@ function EduAIApp() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col pb-20 lg:pb-0">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col pb-20 lg:pb-0">
       {announcement && (
         <div className="bg-blue-600 text-white text-xs font-semibold py-2 px-4 text-center flex items-center justify-center gap-2">
           <Megaphone className="w-4 h-4 shrink-0" /> <span>{announcement.message}</span>
         </div>
       )}
 
+      {/* Mobile Top Bar (Student) */}
       <header className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-2 text-blue-600 font-bold text-lg">
           <BookOpen className="w-6 h-6" /> EduAI
         </div>
-        <button onClick={handleLogout} className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-red-600 px-2.5 py-1.5 rounded-lg bg-slate-100">
-          <LogOut className="w-3.5 h-3.5" /> Chiqish
-        </button>
+        <div className="flex items-center gap-2">
+          <ThemeToggleBtn compact />
+          <button onClick={handleLogout} className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-red-600 px-2.5 py-2 rounded-xl bg-slate-100">
+            <LogOut className="w-3.5 h-3.5" /> Chiqish
+          </button>
+        </div>
       </header>
 
       <div className="flex flex-1">
+        {/* Desktop Sidebar (Student) */}
         <aside className="hidden lg:flex w-64 bg-white border-r border-slate-200 p-5 flex-col justify-between">
           <div>
-            <div className="flex items-center gap-2 text-blue-600 font-bold text-xl mb-8">
-              <BookOpen className="w-6 h-6" /> EduAI
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-2 text-blue-600 font-bold text-xl">
+                <BookOpen className="w-6 h-6" /> EduAI
+              </div>
+              <ThemeToggleBtn compact />
             </div>
             <nav className="space-y-1.5">
               {studentNavItems.map(item => (
@@ -1097,8 +1199,8 @@ function EduAIApp() {
           {activeNav === 'new' && (
             <div className="max-w-4xl mx-auto space-y-5 sm:space-y-6">
               {!currentLesson ? (
-                <div className="bg-white p-5 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-5 sm:space-y-6">
-                  <label className="border-2 border-dashed border-blue-200 hover:border-blue-500 rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center text-center cursor-pointer bg-blue-50/30 transition">
+                <div className="bg-white p-5 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-5">
+                  <label className="border-2 border-dashed border-blue-200 dark:border-blue-800 hover:border-blue-500 rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center text-center cursor-pointer bg-blue-50/30 transition">
                     <Upload className="w-9 h-9 sm:w-10 sm:h-10 text-blue-600 mb-2" />
                     <span className="font-semibold text-slate-700 text-sm sm:text-base">
                       {selectedFile ? selectedFile.name : 'PDF yoki daftar rasmini yuklang'}
@@ -1108,12 +1210,45 @@ function EduAIApp() {
                   </label>
 
                   <textarea
-                    rows="5"
-                    placeholder="Yoki dars matnini shu yerga joylashtiring..."
+                    rows="4"
+                    placeholder="Yoki dars matnini shu yerga joylashtiring (ixtiyoriy, agar fayl yuklangan bo‘lsa)..."
                     value={inputText}
                     onChange={e => setInputText(e.target.value)}
                     className="w-full p-3.5 sm:p-4 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 text-base sm:text-sm"
                   />
+
+                  {/* Majburiy izoh va Natija tili */}
+                  <div className="grid sm:grid-cols-3 gap-3 pt-1">
+                    <div className="sm:col-span-2 space-y-1">
+                      <label className="text-xs font-bold text-slate-700">
+                        AI uchun izoh / ko‘rsatma <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Masalan: Asosiy formulalarni ajratib, qiyinroq test tuz..."
+                        value={lessonInstruction}
+                        onChange={e => setLessonInstruction(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-500 text-base sm:text-sm"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700">
+                        Natija tili <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={lessonLanguage}
+                        onChange={e => setLessonLanguage(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:border-blue-500 text-base sm:text-sm font-medium"
+                      >
+                        <option value="O'zbek tili">O‘zbekcha</option>
+                        <option value="Ingliz tili">Inglizcha (English)</option>
+                        <option value="Rus tili">Ruscha (Русский)</option>
+                        <option value="Qoraqalpoq tili">Qoraqalpoqcha</option>
+                      </select>
+                    </div>
+                  </div>
 
                   <button
                     disabled={loadingAI}
@@ -1169,7 +1304,7 @@ function EduAIApp() {
                     <div className="space-y-4">
                       <div
                         onClick={() => setFlipped(!flipped)}
-                        className="bg-white border-2 border-blue-100 rounded-2xl p-6 sm:p-12 min-h-[210px] sm:min-h-[240px] flex flex-col items-center justify-center text-center cursor-pointer shadow-sm"
+                        className="bg-white border-2 border-blue-100 dark:border-blue-900 rounded-2xl p-6 sm:p-12 min-h-[210px] sm:min-h-[240px] flex flex-col items-center justify-center text-center cursor-pointer shadow-sm"
                       >
                         <span className="text-xs uppercase tracking-wider text-blue-600 font-bold mb-3">
                           {flipped ? 'Javob' : `Savol (${cardIndex + 1} / ${currentLesson.flashcards.length})`}
@@ -1180,13 +1315,13 @@ function EduAIApp() {
                         <span className="text-[11px] text-slate-400 mt-4">(Aylantirish uchun bosing)</span>
                       </div>
                       <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                        <button onClick={() => handleRateFlashcard(1)} className="py-3 px-2 bg-red-50 text-red-600 font-semibold rounded-xl text-xs sm:text-sm">
+                        <button onClick={() => handleRateFlashcard(1)} className="py-3 px-2 bg-red-50 dark:bg-red-950/50 text-red-600 font-semibold rounded-xl text-xs sm:text-sm">
                           Qiyin
                         </button>
-                        <button onClick={() => handleRateFlashcard(2)} className="py-3 px-2 bg-amber-50 text-amber-600 font-semibold rounded-xl text-xs sm:text-sm">
+                        <button onClick={() => handleRateFlashcard(2)} className="py-3 px-2 bg-amber-50 dark:bg-amber-950/50 text-amber-600 font-semibold rounded-xl text-xs sm:text-sm">
                           O‘rtacha
                         </button>
-                        <button onClick={() => handleRateFlashcard(3)} className="py-3 px-2 bg-emerald-50 text-emerald-600 font-semibold rounded-xl text-xs sm:text-sm">
+                        <button onClick={() => handleRateFlashcard(3)} className="py-3 px-2 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 font-semibold rounded-xl text-xs sm:text-sm">
                           Oson
                         </button>
                       </div>
@@ -1196,7 +1331,7 @@ function EduAIApp() {
                   {activeTab === 'quiz' && (
                     <div className="space-y-5 sm:space-y-6">
                       {tabSwitches > 0 && (
-                        <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-semibold">
+                        <div className="p-3 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-xl text-xs font-semibold">
                           Ogohlantirish: Test vaqtida boshqa oynaga {tabSwitches} marta o‘tdingiz (Anti-Cheat qayd etildi).
                         </div>
                       )}
@@ -1213,8 +1348,8 @@ function EduAIApp() {
                               {q.options.map((opt, oIdx) => {
                                 let style = 'border-slate-200 hover:bg-slate-50';
                                 if (isAnswered) {
-                                  if (oIdx === q.correctIndex) style = 'border-emerald-500 bg-emerald-50 text-emerald-800';
-                                  else if (oIdx === chosen) style = 'border-red-500 bg-red-50 text-red-800';
+                                  if (oIdx === q.correctIndex) style = 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300';
+                                  else if (oIdx === chosen) style = 'border-red-500 bg-red-50 dark:bg-red-950/50 text-red-800 dark:text-red-300';
                                 }
 
                                 return (
@@ -1244,7 +1379,7 @@ function EduAIApp() {
                                     {loadingTutor === qIdx ? 'AI Repetitor tushuntirmoqda...' : 'AI Repetitordan so‘rash'}
                                   </button>
                                 ) : (
-                                  <div className="p-3.5 sm:p-4 bg-blue-50 border border-blue-200 rounded-xl text-xs sm:text-sm text-slate-700 leading-relaxed">
+                                  <div className="p-3.5 sm:p-4 bg-blue-50 border border-blue-200 dark:border-blue-800 rounded-xl text-xs sm:text-sm text-slate-700 leading-relaxed">
                                     <span className="font-bold text-blue-700 block mb-1">AI Repetitor izohi:</span>
                                     {tutorExplanations[qIdx]}
                                   </div>
@@ -1260,8 +1395,8 @@ function EduAIApp() {
                           Testni yakunlash va ballni saqlash
                         </button>
                       ) : (
-                        <div className="p-5 sm:p-6 bg-emerald-50 border border-emerald-200 rounded-2xl text-center">
-                          <p className="text-base sm:text-lg font-bold text-emerald-800">
+                        <div className="p-5 sm:p-6 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-center">
+                          <p className="text-base sm:text-lg font-bold text-emerald-800 dark:text-emerald-300">
                             Natija: {Object.entries(answers).filter(([i, a]) => a === currentLesson.quiz[i].correctIndex).length} / {currentLesson.quiz.length} (
                             {Math.round(
                               (Object.entries(answers).filter(([i, a]) => a === currentLesson.quiz[i].correctIndex).length /
@@ -1335,6 +1470,7 @@ function EduAIApp() {
         </main>
       </div>
 
+      {/* Mobile Bottom Navigation Bar (Student) */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 flex justify-around items-center py-2 px-1 z-30">
         {studentNavItems.map(item => (
           <button
@@ -1350,6 +1486,7 @@ function EduAIApp() {
         ))}
       </nav>
 
+      {/* O'QUVCHI PROFILI VA KATTALASHGAN RASM MODALI */}
       {showProfileModal && (
         <div
           onClick={() => setShowProfileModal(false)}
@@ -1371,7 +1508,7 @@ function EduAIApp() {
                 <img
                   src={user.avatarUrl}
                   alt="Kattalashtirilgan profil rasmi"
-                  className="w-36 h-36 sm:w-44 sm:h-44 rounded-3xl object-cover border-4 border-blue-100 shadow-md"
+                  className="w-36 h-36 sm:w-44 sm:h-44 rounded-3xl object-cover border-4 border-blue-100 dark:border-blue-900 shadow-md"
                 />
               ) : (
                 <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-3xl bg-blue-600 text-white flex items-center justify-center font-bold text-5xl shadow-md">
