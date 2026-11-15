@@ -14,11 +14,8 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 function EduAIApp() {
   // Dark mode state (localStorage yoki Telegram mavzusidan oladi)
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem('eduai_dark_mode');
-    if (saved !== null) return saved === 'true';
-    if (window.Telegram?.WebApp?.colorScheme === 'dark') return true;
-    return false;
+const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem('eduai_dark_mode') === 'true';
   });
 
   useEffect(() => {
@@ -485,7 +482,7 @@ function EduAIApp() {
   // ==========================================
   if (!token || !user) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4 relative">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative">
         <div className="absolute top-4 right-4">
           <ThemeToggleBtn />
         </div>
@@ -563,7 +560,7 @@ function EduAIApp() {
   // ==========================================
   if (user.role === 'admin') {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+      <div className="min-h-screen bg-slate-50">
         <header className="bg-white border-b border-slate-200 px-4 sm:px-8 py-3.5 sm:py-4 flex justify-between items-center sticky top-0 z-30">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <ShieldCheck className="w-6 h-6 sm:w-7 sm:h-7 text-blue-600 shrink-0" />
@@ -721,7 +718,7 @@ function EduAIApp() {
   // ==========================================
   if (user.role === 'teacher') {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col">
+      <div className="min-h-screen bg-slate-50 flex flex-col">
         {announcement && (
           <div className="bg-blue-600 text-white text-xs font-semibold py-2 px-4 text-center flex items-center justify-center gap-2">
             <Megaphone className="w-4 h-4 shrink-0" /> <span>{announcement.message}</span>
@@ -1103,7 +1100,7 @@ function EduAIApp() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col pb-20 lg:pb-0">
+    <div className="min-h-screen bg-slate-50 flex flex-col pb-20 lg:pb-0">
       {announcement && (
         <div className="bg-blue-600 text-white text-xs font-semibold py-2 px-4 text-center flex items-center justify-center gap-2">
           <Megaphone className="w-4 h-4 shrink-0" /> <span>{announcement.message}</span>

@@ -1,56 +1,87 @@
 @import "tailwindcss";
-/* Dark Mode uchun silliq o'tish va asosiy ranglar */
+@import "tailwindcss";
+
+/* ==========================================
+   TELEGRAM USLUBIDAGI KUN / TUN REJIMI
+   ========================================== */
 html.dark {
   color-scheme: dark;
 }
 
-html.dark body {
-  background-color: #020617; /* slate-950 */
-  color: #f1f5f9; /* slate-100 */
+/* Asosiy orqa fon (Telegram Dark: #0e1621) */
+html.dark body,
+html.dark .min-h-screen {
+  background-color: #0e1621 !important;
+  color: #f5f5f5 !important;
 }
 
-/* Barcha oq kartochka, jadval va inputlarni avtomatik qorong'i rejimga moslash */
+/* Kartochkalar, yon menyu va headerlar (Telegram panel: #17212b) */
 html.dark .bg-white {
-  background-color: #0f172a !important; /* slate-900 */
+  background-color: #17212b !important;
 }
-html.dark .bg-slate-50 {
-  background-color: #1e293b !important; /* slate-800 */
-}
+
+/* Ichki bloklar va jadval sarlavhalari (#242f3d) */
+html.dark .bg-slate-50,
 html.dark .bg-slate-100 {
-  background-color: #1e293b !important; /* slate-800 */
+  background-color: #242f3d !important;
 }
-html.dark .border-slate-200,
+
+/* Chegaralar (Borders: #2b3847) */
 html.dark .border-slate-100,
+html.dark .border-slate-200,
 html.dark .border-slate-300 {
-  border-color: #334155 !important; /* slate-700 */
+  border-color: #2b3847 !important;
 }
+
+html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #2b3847 !important;
+}
+
+/* Matn ranglari */
 html.dark .text-slate-800,
 html.dark .text-slate-900 {
-  color: #f8fafc !important; /* slate-50 */
+  color: #f5f5f5 !important;
 }
+
 html.dark .text-slate-700 {
-  color: #e2e8f0 !important; /* slate-200 */
+  color: #e2e8f0 !important;
 }
+
 html.dark .text-slate-600 {
-  color: #cbd5e1 !important; /* slate-300 */
+  color: #cbd5e1 !important;
 }
-html.dark .text-slate-500 {
-  color: #94a3b8 !important; /* slate-400 */
+
+html.dark .text-slate-500,
+html.dark .text-slate-400 {
+  color: #8b9bb4 !important;
 }
+
+/* Input, Textarea va Select maydonlari */
 html.dark input,
 html.dark textarea,
 html.dark select {
-  background-color: #1e293b !important;
-  color: #f8fafc !important;
-  border-color: #334155 !important;
+  background-color: #242f3d !important;
+  color: #ffffff !important;
+  border-color: #2f3e50 !important;
 }
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #708499 !important;
+}
+
+/* Hover effektlari */
 html.dark .hover\:bg-slate-50:hover,
 html.dark .hover\:bg-slate-100:hover {
-  background-color: #334155 !important;
+  background-color: #2b394a !important;
 }
+
+/* Moviy nishonlar va tugmalar */
 html.dark .bg-blue-50 {
-  background-color: rgba(37, 99, 235, 0.18) !important;
+  background-color: rgba(43, 127, 255, 0.16) !important;
 }
+
+html.dark .text-blue-600,
 html.dark .text-blue-700 {
-  color: #60a5fa !important;
+  color: #5294ff !important;
 }
