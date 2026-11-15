@@ -13,8 +13,7 @@ const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://l
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 function EduAIApp() {
-  // Dark mode state (localStorage yoki Telegram mavzusidan oladi)
-const [darkMode, setDarkMode] = useState(() => {
+  const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('eduai_dark_mode') === 'true';
   });
 
@@ -228,8 +227,37 @@ const [darkMode, setDarkMode] = useState(() => {
         body: JSON.stringify({ customPassword: custom }),
       });
 
-      alert(`Yangi parol saqlandi!\nLogin: ${data.username}\nParol: ${data.plainPassword}`);
-      if (selectedGroup) loadGroupDashboard(selectedGroup);
+      setGeneratedCreds({
+        fullName: data.fullName,
+        username: data.username,
+        plainPassword: data.plainPassword
+      });
+
+      alert(`Yangi parol yaratildi (faqat bir marta ko'rsatiladi):\nLogin: ${data.username}\nParol: ${data.plainPassword}`);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleDownloadCsv = async () => {
+    if (!selectedGroup) return;
+    try {
+      const res = await fetch(`${API_URL}/teacher/groups/${selectedGroup.id}/export-csv`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Hisobotni yuklashda xatolik');
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `guruh_${selectedGroup.name}_hisobot.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
     } catch (err) {
       alert(err.message);
     }
@@ -624,7 +652,7 @@ const [darkMode, setDarkMode] = useState(() => {
                   <div className="text-xs sm:text-sm min-w-0">
                     <p className="font-bold text-slate-800 truncate">{generatedTeacherCreds.fullName}</p>
                     <p>Login: <span className="font-mono font-bold text-blue-700">{generatedTeacherCreds.username}</span></p>
-                    <p>Parol: <span className="font-mono font-bold text-blue-700">{generatedTeacherCreds.plainPassword}</span></p>
+                    <p>Bir martalik parol: <span className="font-mono font-bold text-blue-700">{generatedTeacherCreds.plainPassword}</span></p>
                   </div>
                   <button
                     onClick={() =>
@@ -776,7 +804,7 @@ const [darkMode, setDarkMode] = useState(() => {
                   teacherView === 'tools' ? 'bg-blue-600 text-white shadow-sm' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
                 }`}
               >
-                <Calculator className="w-4 h-4 shrink-0" /> Kalkulyator va Jadval
+                <Calculator className="w-4 h-4 shrink-0" /> Jihozlar (Kalkulyator / Jadval)
               </button>
 
               <form onSubmit={handleCreateGroup} className="flex gap-2 mb-4">
@@ -828,34 +856,13 @@ const [darkMode, setDarkMode] = useState(() => {
               <>
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                   <h1 className="text-xl sm:text-2xl font-bold text-slate-800">{selectedGroup.name} — Boshqaruv</h1>
-                 <button
-  type="button"
-  onClick={async () => {
-    try {
-      const res = await fetch(`${API_URL}/teacher/groups/${selectedGroup.id}/export-csv`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'Hisobotni yuklashda xatolik');
-      }
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `guruh_${selectedGroup.name}_hisobot.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      alert(err.message);
-    }
-  }}
-  className="inline-flex items-center justify-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 w-full sm:w-auto cursor-pointer"
->
-  <Download className="w-4 h-4 text-blue-600" /> CSV Hisobot
-</button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadCsv}
+                    className="inline-flex items-center justify-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 w-full sm:w-auto cursor-pointer"
+                  >
+                    <Download className="w-4 h-4 text-blue-600" /> CSV Hisobot
+                  </button>
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
@@ -877,7 +884,8 @@ const [darkMode, setDarkMode] = useState(() => {
                         <div className="text-xs sm:text-sm min-w-0">
                           <p className="font-bold text-slate-800 truncate">{generatedCreds.fullName}</p>
                           <p>Login: <span className="font-mono font-bold text-blue-700">{generatedCreds.username}</span></p>
-                          <p>Parol: <span className="font-mono font-bold text-blue-700">{generatedCreds.plainPassword}</span></p>
+                          <p>Bir martalik parol: <span className="font-mono font-bold text-blue-700">{generatedCreds.plainPassword}</span></p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">* Xavfsizlik uchun parol bazada saqlanmaydi, nusxalab oling.</p>
                         </div>
                         <button
                           onClick={() =>
@@ -894,7 +902,6 @@ const [darkMode, setDarkMode] = useState(() => {
                     )}
                   </div>
 
-                  {/* Guruhga AI Uyga Vazifa yuborish (Majburiy izoh + Til tanlash) */}
                   <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 space-y-3">
                     <h2 className="font-semibold text-slate-800 text-sm sm:text-base">Guruhga AI Uyga Vazifa yuborish</h2>
                     <input
@@ -941,7 +948,7 @@ const [darkMode, setDarkMode] = useState(() => {
                   </div>
                 </div>
 
-                {/* O'quvchilar jadvali */}
+                {/* O'quvchilar jadvali (parollar yashirilgan) */}
                 <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
                   <div className="p-4 border-b border-slate-100 flex justify-between items-center">
                     <span className="font-bold text-slate-800 text-sm sm:text-base">O‘quvchilar ro‘yxati ({groupStats.students.length} ta)</span>
@@ -966,15 +973,15 @@ const [darkMode, setDarkMode] = useState(() => {
                           <tr key={st.id}>
                             <td className="p-3.5 sm:p-4 font-semibold text-slate-800">{st.full_name}</td>
                             <td className="p-3.5 sm:p-4 font-mono text-slate-600">{st.username}</td>
-                            <td className="p-3.5 sm:p-4 font-mono text-blue-700 font-semibold">
-                              {st.plain_password || '••••••'}
+                            <td className="p-3.5 sm:p-4 font-mono text-slate-400 select-none" title="Parol shifrlangan">
+                              ••••••
                             </td>
                             <td className="p-3.5 sm:p-4">
                               <button
                                 onClick={() => handleResetStudentPassword(st.id, st.full_name)}
                                 className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition"
                               >
-                                <KeyRound className="w-3.5 h-3.5" /> O‘zgartirish
+                                <KeyRound className="w-3.5 h-3.5" /> Yangi parol
                               </button>
                             </td>
                             <td className="p-3.5 sm:p-4">
@@ -1025,7 +1032,7 @@ const [darkMode, setDarkMode] = useState(() => {
                     ) : (
                       <div className="space-y-2">
                         {groupStats.heatmap.map(h => (
-                          <div key={h.questionNumber} className="flex justify-between items-center p-3 bg-red-50 dark:bg-red-950/40 rounded-xl text-sm">
+                          <div key={h.questionNumber} className="flex justify-between items-center p-3 bg-red-50 rounded-xl text-sm">
                             <span>{h.questionNumber}-savol</span>
                             <span className="font-bold text-red-600">{h.errorRate}% o‘quvchi adashgan</span>
                           </div>
@@ -1105,7 +1112,7 @@ const [darkMode, setDarkMode] = useState(() => {
   }
 
   // ==========================================
-  // 4. STUDENT PANEL
+  // 4. STUDENT PANEL ("Jihozlar" bilan)
   // ==========================================
   const studentNavItems = [
     { id: 'new', label: 'Yangi dars', icon: Plus },
@@ -1129,7 +1136,6 @@ const [darkMode, setDarkMode] = useState(() => {
         </div>
       )}
 
-      {/* Mobile Top Bar (Student) */}
       <header className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-2 text-blue-600 font-bold text-lg">
           <BookOpen className="w-6 h-6" /> EduAI
@@ -1143,7 +1149,6 @@ const [darkMode, setDarkMode] = useState(() => {
       </header>
 
       <div className="flex flex-1">
-        {/* Desktop Sidebar (Student) */}
         <aside className="hidden lg:flex w-64 bg-white border-r border-slate-200 p-5 flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-8">
@@ -1219,7 +1224,7 @@ const [darkMode, setDarkMode] = useState(() => {
             <div className="max-w-4xl mx-auto space-y-5 sm:space-y-6">
               {!currentLesson ? (
                 <div className="bg-white p-5 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-5">
-                  <label className="border-2 border-dashed border-blue-200 dark:border-blue-800 hover:border-blue-500 rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center text-center cursor-pointer bg-blue-50/30 transition">
+                  <label className="border-2 border-dashed border-blue-200 hover:border-blue-500 rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center text-center cursor-pointer bg-blue-50/30 transition">
                     <Upload className="w-9 h-9 sm:w-10 sm:h-10 text-blue-600 mb-2" />
                     <span className="font-semibold text-slate-700 text-sm sm:text-base">
                       {selectedFile ? selectedFile.name : 'PDF yoki daftar rasmini yuklang'}
@@ -1236,7 +1241,6 @@ const [darkMode, setDarkMode] = useState(() => {
                     className="w-full p-3.5 sm:p-4 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 text-base sm:text-sm"
                   />
 
-                  {/* Majburiy izoh va Natija tili */}
                   <div className="grid sm:grid-cols-3 gap-3 pt-1">
                     <div className="sm:col-span-2 space-y-1">
                       <label className="text-xs font-bold text-slate-700">
@@ -1323,7 +1327,7 @@ const [darkMode, setDarkMode] = useState(() => {
                     <div className="space-y-4">
                       <div
                         onClick={() => setFlipped(!flipped)}
-                        className="bg-white border-2 border-blue-100 dark:border-blue-900 rounded-2xl p-6 sm:p-12 min-h-[210px] sm:min-h-[240px] flex flex-col items-center justify-center text-center cursor-pointer shadow-sm"
+                        className="bg-white border-2 border-blue-100 rounded-2xl p-6 sm:p-12 min-h-[210px] sm:min-h-[240px] flex flex-col items-center justify-center text-center cursor-pointer shadow-sm"
                       >
                         <span className="text-xs uppercase tracking-wider text-blue-600 font-bold mb-3">
                           {flipped ? 'Javob' : `Savol (${cardIndex + 1} / ${currentLesson.flashcards.length})`}
@@ -1334,13 +1338,13 @@ const [darkMode, setDarkMode] = useState(() => {
                         <span className="text-[11px] text-slate-400 mt-4">(Aylantirish uchun bosing)</span>
                       </div>
                       <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                        <button onClick={() => handleRateFlashcard(1)} className="py-3 px-2 bg-red-50 dark:bg-red-950/50 text-red-600 font-semibold rounded-xl text-xs sm:text-sm">
+                        <button onClick={() => handleRateFlashcard(1)} className="py-3 px-2 bg-red-50 text-red-600 font-semibold rounded-xl text-xs sm:text-sm">
                           Qiyin
                         </button>
-                        <button onClick={() => handleRateFlashcard(2)} className="py-3 px-2 bg-amber-50 dark:bg-amber-950/50 text-amber-600 font-semibold rounded-xl text-xs sm:text-sm">
+                        <button onClick={() => handleRateFlashcard(2)} className="py-3 px-2 bg-amber-50 text-amber-600 font-semibold rounded-xl text-xs sm:text-sm">
                           O‘rtacha
                         </button>
-                        <button onClick={() => handleRateFlashcard(3)} className="py-3 px-2 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 font-semibold rounded-xl text-xs sm:text-sm">
+                        <button onClick={() => handleRateFlashcard(3)} className="py-3 px-2 bg-emerald-50 text-emerald-600 font-semibold rounded-xl text-xs sm:text-sm">
                           Oson
                         </button>
                       </div>
@@ -1350,7 +1354,7 @@ const [darkMode, setDarkMode] = useState(() => {
                   {activeTab === 'quiz' && (
                     <div className="space-y-5 sm:space-y-6">
                       {tabSwitches > 0 && (
-                        <div className="p-3 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-xl text-xs font-semibold">
+                        <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-semibold">
                           Ogohlantirish: Test vaqtida boshqa oynaga {tabSwitches} marta o‘tdingiz (Anti-Cheat qayd etildi).
                         </div>
                       )}
@@ -1367,8 +1371,8 @@ const [darkMode, setDarkMode] = useState(() => {
                               {q.options.map((opt, oIdx) => {
                                 let style = 'border-slate-200 hover:bg-slate-50';
                                 if (isAnswered) {
-                                  if (oIdx === q.correctIndex) style = 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300';
-                                  else if (oIdx === chosen) style = 'border-red-500 bg-red-50 dark:bg-red-950/50 text-red-800 dark:text-red-300';
+                                  if (oIdx === q.correctIndex) style = 'border-emerald-500 bg-emerald-50 text-emerald-800';
+                                  else if (oIdx === chosen) style = 'border-red-500 bg-red-50 text-red-800';
                                 }
 
                                 return (
@@ -1398,7 +1402,7 @@ const [darkMode, setDarkMode] = useState(() => {
                                     {loadingTutor === qIdx ? 'AI Repetitor tushuntirmoqda...' : 'AI Repetitordan so‘rash'}
                                   </button>
                                 ) : (
-                                  <div className="p-3.5 sm:p-4 bg-blue-50 border border-blue-200 dark:border-blue-800 rounded-xl text-xs sm:text-sm text-slate-700 leading-relaxed">
+                                  <div className="p-3.5 sm:p-4 bg-blue-50 border border-blue-200 rounded-xl text-xs sm:text-sm text-slate-700 leading-relaxed">
                                     <span className="font-bold text-blue-700 block mb-1">AI Repetitor izohi:</span>
                                     {tutorExplanations[qIdx]}
                                   </div>
@@ -1414,8 +1418,8 @@ const [darkMode, setDarkMode] = useState(() => {
                           Testni yakunlash va ballni saqlash
                         </button>
                       ) : (
-                        <div className="p-5 sm:p-6 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-center">
-                          <p className="text-base sm:text-lg font-bold text-emerald-800 dark:text-emerald-300">
+                        <div className="p-5 sm:p-6 bg-emerald-50 border border-emerald-200 rounded-2xl text-center">
+                          <p className="text-base sm:text-lg font-bold text-emerald-800">
                             Natija: {Object.entries(answers).filter(([i, a]) => a === currentLesson.quiz[i].correctIndex).length} / {currentLesson.quiz.length} (
                             {Math.round(
                               (Object.entries(answers).filter(([i, a]) => a === currentLesson.quiz[i].correctIndex).length /
@@ -1489,7 +1493,6 @@ const [darkMode, setDarkMode] = useState(() => {
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar (Student) */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 flex justify-around items-center py-2 px-1 z-30">
         {studentNavItems.map(item => (
           <button
@@ -1505,7 +1508,6 @@ const [darkMode, setDarkMode] = useState(() => {
         ))}
       </nav>
 
-      {/* O'QUVCHI PROFILI VA KATTALASHGAN RASM MODALI */}
       {showProfileModal && (
         <div
           onClick={() => setShowProfileModal(false)}
@@ -1527,7 +1529,7 @@ const [darkMode, setDarkMode] = useState(() => {
                 <img
                   src={user.avatarUrl}
                   alt="Kattalashtirilgan profil rasmi"
-                  className="w-36 h-36 sm:w-44 sm:h-44 rounded-3xl object-cover border-4 border-blue-100 dark:border-blue-900 shadow-md"
+                  className="w-36 h-36 sm:w-44 sm:h-44 rounded-3xl object-cover border-4 border-blue-100 shadow-md"
                 />
               ) : (
                 <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-3xl bg-blue-600 text-white flex items-center justify-center font-bold text-5xl shadow-md">

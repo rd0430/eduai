@@ -19,14 +19,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-app.set('trust proxy', 1); // Railway / Reverse proxy ortida IP manzilni to'g'ri aniqlash uchun
+app.set('trust proxy', 1);
 
 // ==========================================
 // 1. XAVFSIZLIK QATLAMLARI (HELMET, CORS, LIMITER)
 // ==========================================
 
 app.use(helmet({
-  contentSecurityPolicy: false, // Desmos iframe va Google OAuth ishlashi uchun
+  contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false
 }));
 
@@ -39,7 +39,6 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Mobil ilova / Telegram Mini App / bir xil domen so'rovlariga ruxsat
     if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
@@ -48,10 +47,8 @@ app.use(cors({
   credentials: true
 }));
 
-// Katta hajmli JSON payload hujumlaridan himoya
 app.use(express.json({ limit: '1mb' }));
 
-// Umumiy API so'rovlar cheklovi (15 daqiqada 300 ta so'rov)
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
@@ -61,25 +58,22 @@ const generalLimiter = rateLimit({
 });
 app.use('/api/', generalLimiter);
 
-// Brute-Force (parolni taxmin qilish) hujumiga qarshi limiter
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 daqiqa
-  max: 10, // maksimal 10 ta urinish
+  windowMs: 15 * 60 * 1000,
+  max: 10,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Juda ko‘p noto‘g‘ri urinish! 15 daqiqadan keyin qayta urining.' }
 });
 
-// Gemini AI API balansini himoyalash uchun limiter
 const aiLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 soat
-  max: 25, // 1 soatda maksimal 25 ta AI so'rov
+  windowMs: 60 * 60 * 1000,
+  max: 25,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Soatlik AI limiti tugadi (maksimal 25 ta). Keyinroq urinib ko‘ring.' }
 });
 
-// Fayl yuklash cheklovlari (faqat PDF, JPG, PNG, WEBP)
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
@@ -163,7 +157,6 @@ const requireTeacher = (req, res, next) => {
   next();
 };
 
-// IDOR Himoya 1: Guruh shu ustozga tegishli ekanligini tekshiradi
 async function verifyGroupOwner(groupId, teacherId) {
   if (!groupId || !teacherId) return false;
   const { data } = await supabase
@@ -175,7 +168,6 @@ async function verifyGroupOwner(groupId, teacherId) {
   return Boolean(data);
 }
 
-// IDOR Himoya 2: O'quvchi shu ustozning guruhida ekanligini tekshiradi
 async function verifyStudentOwner(studentId, teacherId) {
   if (!studentId || !teacherId) return false;
   const { data: student } = await supabase
@@ -302,10 +294,7 @@ app.post('/api/auth/change-password', loginLimiter, authenticate, checkConfig, a
 
     const { error: updateError } = await supabase
       .from('users')
-      .update({
-        password_hash: newPasswordHash,
-        plain_password: cleanNewPassword
-      })
+      .update({ password_hash: newPasswordHash })
       .eq('id', req.user.id);
 
     if (updateError) throw updateError;
@@ -369,7 +358,6 @@ app.post('/api/admin/teachers', authenticate, requireAdmin, checkConfig, async (
         subject: subject?.trim().slice(0, 100) || 'Umumiy fan',
         username,
         password_hash: passwordHash,
-        plain_password: plainPassword,
         is_active: true
       })
       .select('id, full_name, subject, username')
@@ -402,7 +390,7 @@ app.post('/api/admin/teachers/:id/reset-password', authenticate, requireAdmin, c
   const passwordHash = await bcrypt.hash(plainPassword, 10);
   const { data: teacher } = await supabase
     .from('users')
-    .update({ password_hash: passwordHash, plain_password: plainPassword })
+    .update({ password_hash: passwordHash })
     .eq('id', id)
     .eq('role', 'teacher')
     .select('full_name, username')
@@ -438,7 +426,6 @@ app.post('/api/lessons/generate', aiLimiter, authenticate, checkConfig, upload.s
       return res.status(400).json({ error: 'Iltimos, AI uchun izoh (ko‘rsatma) kiriting!' });
     }
 
-    // IDOR Himoya: Agar ustoz guruhga vazifa yuborayotgan bo'lsa, guruh egasi ekanligini tekshiramiz
     if (groupId) {
       if (req.user.role !== 'teacher' || !(await verifyGroupOwner(groupId, req.user.id))) {
         return res.status(403).json({ error: 'Sizda ushbu guruhga vazifa yuborish huquqi yo‘q!' });
@@ -657,7 +644,7 @@ app.post('/api/tracker/ping', authenticate, checkConfig, async (req, res) => {
 });
 
 // ==========================================
-// 7. TEACHER & PROFILE ROUTES (IDOR HIMOYASI BILAN)
+// 7. TEACHER & PROFILE ROUTES (IDOR HIMOYASI, OCHIQ PAROLSIZ)
 // ==========================================
 
 app.get('/api/teacher/groups', authenticate, requireTeacher, checkConfig, async (req, res) => {
@@ -688,7 +675,6 @@ app.post('/api/teacher/groups/:groupId/students', authenticate, requireTeacher, 
     const { fullName } = req.body;
     const { groupId } = req.params;
 
-    // IDOR Himoya: Faqat o'z guruhiga o'quvchi qo'sha oladi
     if (!(await verifyGroupOwner(groupId, req.user.id))) {
       return res.status(403).json({ error: 'Sizda ushbu guruhga o‘quvchi qo‘shish huquqi yo‘q!' });
     }
@@ -707,7 +693,6 @@ app.post('/api/teacher/groups/:groupId/students', authenticate, requireTeacher, 
         full_name: fullName.trim().slice(0, 100),
         username,
         password_hash: passwordHash,
-        plain_password: plainPassword,
         group_id: groupId
       })
       .select('id, full_name')
@@ -725,7 +710,6 @@ app.post('/api/teacher/students/:studentId/reset-password', authenticate, requir
     const { studentId } = req.params;
     const { customPassword } = req.body;
 
-    // IDOR Himoya: Faqat o'z guruhidagi o'quvchi parolini o'zgartira oladi
     if (!(await verifyStudentOwner(studentId, req.user.id))) {
       return res.status(403).json({ error: 'Sizda ushbu o‘quvchi parolini o‘zgartirish huquqi yo‘q!' });
     }
@@ -735,10 +719,10 @@ app.post('/api/teacher/students/:studentId/reset-password', authenticate, requir
 
     const { data: updated, error } = await supabase
       .from('users')
-      .update({ password_hash: passwordHash, plain_password: newPlainPassword })
+      .update({ password_hash: passwordHash })
       .eq('id', studentId)
       .eq('role', 'student')
-      .select('id, full_name, username, plain_password')
+      .select('id, full_name, username')
       .single();
 
     if (error) throw error;
@@ -746,7 +730,7 @@ app.post('/api/teacher/students/:studentId/reset-password', authenticate, requir
       id: updated.id,
       fullName: updated.full_name,
       username: updated.username,
-      plainPassword: updated.plain_password
+      plainPassword: newPlainPassword
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -780,7 +764,6 @@ app.get('/api/teacher/groups/:groupId/dashboard', authenticate, requireTeacher, 
   try {
     const { groupId } = req.params;
 
-    // IDOR Himoya: Faqat o'z guruhi statistikasini ko'ra oladi
     if (!(await verifyGroupOwner(groupId, req.user.id))) {
       return res.status(403).json({ error: 'Sizda ushbu guruhni ko‘rish huquqi yo‘q!' });
     }
@@ -788,7 +771,7 @@ app.get('/api/teacher/groups/:groupId/dashboard', authenticate, requireTeacher, 
     const today = new Date().toISOString().split('T')[0];
     const { data: students } = await supabase
       .from('users')
-      .select('id, full_name, username, plain_password, avatar_url, xp_points, streak_days, is_online, last_seen')
+      .select('id, full_name, username, avatar_url, xp_points, streak_days, is_online, last_seen')
       .eq('group_id', groupId);
 
     const studentIds = (students || []).map(s => s.id);
@@ -822,7 +805,6 @@ app.get('/api/teacher/groups/:groupId/dashboard', authenticate, requireTeacher, 
 app.get('/api/teacher/groups/:groupId/export-csv', authenticate, requireTeacher, checkConfig, async (req, res) => {
   const { groupId } = req.params;
 
-  // IDOR Himoya: Faqat o'z guruhi CSV hisobotini yuklay oladi
   if (!(await verifyGroupOwner(groupId, req.user.id))) {
     return res.status(403).json({ error: 'Sizda ushbu guruh hisobotini yuklash huquqi yo‘q!' });
   }
@@ -835,7 +817,6 @@ app.get('/api/teacher/groups/:groupId/export-csv', authenticate, requireTeacher,
   res.send('\uFEFF' + header + rows);
 });
 
-// Global xatoliklarni ushlash (Multer va CORS xatolari chiroyli JSON ko'rinishida qaytishi uchun)
 app.use((err, req, res, next) => {
   if (err) {
     return res.status(400).json({ error: err.message || 'So‘rovda xatolik yuz berdi' });
