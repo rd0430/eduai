@@ -12,6 +12,13 @@ const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://l
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 function EduAIApp() {
+  useEffect(() => {
+  if (window.Telegram?.WebApp) {
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand(); // Mini App'ni to'liq ekranga ochadi
+  }
+}, []);
   const [token, setToken] = useState(localStorage.getItem('eduai_token') || '');
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('eduai_user') || 'null'));
   const [announcement, setAnnouncement] = useState(null);
