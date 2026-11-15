@@ -828,12 +828,34 @@ const [darkMode, setDarkMode] = useState(() => {
               <>
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                   <h1 className="text-xl sm:text-2xl font-bold text-slate-800">{selectedGroup.name} — Boshqaruv</h1>
-                  <a
-                    href={`${API_URL}/teacher/groups/${selectedGroup.id}/export-csv`}
-                    className="inline-flex items-center justify-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 w-full sm:w-auto"
-                  >
-                    <Download className="w-4 h-4 text-blue-600" /> CSV Hisobot
-                  </a>
+                 <button
+  type="button"
+  onClick={async () => {
+    try {
+      const res = await fetch(`${API_URL}/teacher/groups/${selectedGroup.id}/export-csv`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Hisobotni yuklashda xatolik');
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `guruh_${selectedGroup.name}_hisobot.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err.message);
+    }
+  }}
+  className="inline-flex items-center justify-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 w-full sm:w-auto cursor-pointer"
+>
+  <Download className="w-4 h-4 text-blue-600" /> CSV Hisobot
+</button>
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-4 sm:gap-6">

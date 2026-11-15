@@ -4,5 +4,9 @@
   "scripts": {
     "build": "cd eduai-backend && npm install && cd ../eduai-client && rm -rf node_modules package-lock.json && npm install && npm run build",
     "start": "cd eduai-backend && node server.js"
+  },
+  "dependencies": {
+    "express-rate-limit": "^8.7.4",
+    "helmet": "^8.3.0"
   }
 }

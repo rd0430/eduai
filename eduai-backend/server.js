@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import multer from 'multer';
 import bcrypt from 'bcryptjs';
@@ -17,18 +19,98 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.set('trust proxy', 1); // Railway / Reverse proxy ortida IP manzilni to'g'ri aniqlash uchun
+
+// ==========================================
+// 1. XAVFSIZLIK QATLAMLARI (HELMET, CORS, LIMITER)
+// ==========================================
+
+app.use(helmet({
+  contentSecurityPolicy: false, // Desmos iframe va Google OAuth ishlashi uchun
+  crossOriginEmbedderPolicy: false
+}));
+
+const allowedOrigins = [
+  'https://eduai-09.up.railway.app',
+  'http://localhost:5173',
+  'http://localhost:5000',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Mobil ilova / Telegram Mini App / bir xil domen so'rovlariga ruxsat
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('CORS siyosati: Ushbu domendan so‘rov yuborish taqiqlangan!'));
+  },
+  credentials: true
+}));
+
+// Katta hajmli JSON payload hujumlaridan himoya
+app.use(express.json({ limit: '1mb' }));
+
+// Umumiy API so'rovlar cheklovi (15 daqiqada 300 ta so'rov)
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Juda ko‘p so‘rov yuborildi. Birozdan so‘ng qayta urining.' }
+});
+app.use('/api/', generalLimiter);
+
+// Brute-Force (parolni taxmin qilish) hujumiga qarshi limiter
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 daqiqa
+  max: 10, // maksimal 10 ta urinish
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Juda ko‘p noto‘g‘ri urinish! 15 daqiqadan keyin qayta urining.' }
+});
+
+// Gemini AI API balansini himoyalash uchun limiter
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 soat
+  max: 25, // 1 soatda maksimal 25 ta AI so'rov
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Soatlik AI limiti tugadi (maksimal 25 ta). Keyinroq urinib ko‘ring.' }
+});
+
+// Fayl yuklash cheklovlari (faqat PDF, JPG, PNG, WEBP)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 }
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Faqat PDF, JPG, PNG yoki WEBP fayllarga ruxsat etiladi!'));
+    }
+  }
 });
+
+// ==========================================
+// 2. BAZA VA AI KONFIGURATSIYASI
+// ==========================================
 
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
+const googleClient = process.env.GOOGLE_CLIENT_ID ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID) : null;
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  console.warn('OGOHLANTIRISH: JWT_SECRET kiritilmagan! Production muhitda albatta murakkab JWT_SECRET o‘rnating.');
+}
+
+const getJwtSecret = () => JWT_SECRET || 'eduai_fallback_dev_secret_change_in_prod';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// Gemini band bo'lsa qayta urinadi; 90 soniyada javob bo'lmasa to'xtatadi
 async function generateWithRetry(params) {
   const models = [params.model, process.env.GEMINI_FALLBACK_MODEL].filter(Boolean);
   let lastErr;
@@ -51,10 +133,9 @@ async function generateWithRetry(params) {
   throw lastErr;
 }
 
-const googleClient = process.env.GOOGLE_CLIENT_ID ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID) : null;
-
-app.use(cors());
-app.use(express.json());
+// ==========================================
+// 3. MIDDLEWARE VA IDOR TEKSHIRUVCHILAR
+// ==========================================
 
 const checkConfig = (req, res, next) => {
   if (!supabase) return res.status(500).json({ error: 'SUPABASE_URL yoki SUPABASE_SERVICE_ROLE_KEY kiritilmagan!' });
@@ -65,10 +146,10 @@ const authenticate = (req, res, next) => {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) return res.status(401).json({ error: 'Token topilmadi' });
   try {
-    req.user = jwt.verify(header.split(' ')[1], process.env.JWT_SECRET || 'eduai_default_secret');
+    req.user = jwt.verify(header.split(' ')[1], getJwtSecret());
     next();
   } catch {
-    res.status(403).json({ error: 'Token yaroqsiz' });
+    res.status(403).json({ error: 'Token yaroqsiz yoki muddati tugagan' });
   }
 };
 
@@ -77,44 +158,81 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
+const requireTeacher = (req, res, next) => {
+  if (req.user?.role !== 'teacher') return res.status(403).json({ error: 'Faqat O‘qituvchi uchun' });
+  next();
+};
+
+// IDOR Himoya 1: Guruh shu ustozga tegishli ekanligini tekshiradi
+async function verifyGroupOwner(groupId, teacherId) {
+  if (!groupId || !teacherId) return false;
+  const { data } = await supabase
+    .from('groups')
+    .select('id')
+    .eq('id', groupId)
+    .eq('teacher_id', teacherId)
+    .single();
+  return Boolean(data);
+}
+
+// IDOR Himoya 2: O'quvchi shu ustozning guruhida ekanligini tekshiradi
+async function verifyStudentOwner(studentId, teacherId) {
+  if (!studentId || !teacherId) return false;
+  const { data: student } = await supabase
+    .from('users')
+    .select('group_id')
+    .eq('id', studentId)
+    .eq('role', 'student')
+    .single();
+
+  if (!student?.group_id) return false;
+  return verifyGroupOwner(student.group_id, teacherId);
+}
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', port: process.env.PORT || 5000 });
 });
 
 // ==========================================
-// 1. AUTHENTICATION & PASSWORD MANAGEMENT
+// 4. AUTHENTICATION & PASSWORD ROUTES
 // ==========================================
 
-app.post('/api/auth/google-admin', async (req, res) => {
+app.post('/api/auth/google-admin', loginLimiter, async (req, res) => {
   try {
     if (!googleClient) return res.status(500).json({ error: 'GOOGLE_CLIENT_ID kiritilmagan!' });
     const { credential } = req.body;
+    if (!credential) return res.status(400).json({ error: 'Google token yuborilmadi' });
+
     const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: process.env.GOOGLE_CLIENT_ID });
     const payload = ticket.getPayload();
     if (!payload?.email || payload.email.toLowerCase() !== (process.env.ADMIN_EMAIL || '').toLowerCase()) {
       return res.status(403).json({ error: 'Ushbu Google akkauntga Admin ruxsati berilmagan!' });
     }
-    const token = jwt.sign({ id: 'super_admin', role: 'admin', email: payload.email }, process.env.JWT_SECRET || 'eduai_default_secret', { expiresIn: '7d' });
+    const token = jwt.sign({ id: 'super_admin', role: 'admin', email: payload.email }, getJwtSecret(), { expiresIn: '7d' });
     res.json({ token, user: { id: 'super_admin', fullName: payload.name || 'Super Admin', username: payload.email, role: 'admin', avatar: payload.picture } });
   } catch (err) {
     res.status(401).json({ error: 'Google xatosi: ' + err.message });
   }
 });
 
-app.post('/api/auth/login', checkConfig, async (req, res) => {
+app.post('/api/auth/login', loginLimiter, checkConfig, async (req, res) => {
   try {
     const { username, password, role } = req.body;
+    if (!username || !password || !role) {
+      return res.status(400).json({ error: 'Login, parol va rol kiritilishi shart' });
+    }
+
     const { data: user, error } = await supabase
       .from('users')
-      .select('*')
-      .eq('username', username.trim().toLowerCase())
-      .eq('role', role)
+      .select('id, full_name, subject, username, role, group_id, xp_points, streak_days, last_active_date, is_active, password_hash, avatar_url')
+      .eq('username', String(username).trim().toLowerCase())
+      .eq('role', String(role))
       .single();
 
     if (error || !user) return res.status(401).json({ error: 'Login yoki rol xato' });
     if (!user.is_active) return res.status(403).json({ error: 'Akkaunt bloklangan' });
 
-    const valid = await bcrypt.compare(password, user.password_hash);
+    const valid = await bcrypt.compare(String(password), user.password_hash);
     if (!valid) return res.status(401).json({ error: 'Parol noto‘g‘ri' });
 
     const today = new Date().toISOString().split('T')[0];
@@ -129,7 +247,7 @@ app.post('/api/auth/login', checkConfig, async (req, res) => {
 
     const token = jwt.sign(
       { id: user.id, role: user.role, group_id: user.group_id },
-      process.env.JWT_SECRET || 'eduai_default_secret',
+      getJwtSecret(),
       { expiresIn: '7d' }
     );
 
@@ -152,8 +270,7 @@ app.post('/api/auth/login', checkConfig, async (req, res) => {
   }
 });
 
-// O'quvchi va O'qituvchi o'z parolini o'zgartirishi
-app.post('/api/auth/change-password', authenticate, checkConfig, async (req, res) => {
+app.post('/api/auth/change-password', loginLimiter, authenticate, checkConfig, async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
 
@@ -161,8 +278,8 @@ app.post('/api/auth/change-password', authenticate, checkConfig, async (req, res
       return res.status(403).json({ error: 'Super Admin paroli Google akkaunt orqali boshqariladi' });
     }
 
-    if (!oldPassword || !newPassword || newPassword.trim().length < 4) {
-      return res.status(400).json({ error: 'Yangi parol kamida 4 ta belgidan iborat bo‘lishi kerak' });
+    if (!oldPassword || !newPassword || String(newPassword).trim().length < 4 || String(newPassword).trim().length > 64) {
+      return res.status(400).json({ error: 'Yangi parol 4 dan 64 tagacha belgidan iborat bo‘lishi kerak' });
     }
 
     const { data: user, error: fetchError } = await supabase
@@ -175,12 +292,12 @@ app.post('/api/auth/change-password', authenticate, checkConfig, async (req, res
       return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
     }
 
-    const valid = await bcrypt.compare(oldPassword, user.password_hash);
+    const valid = await bcrypt.compare(String(oldPassword), user.password_hash);
     if (!valid) {
       return res.status(401).json({ error: 'Hozirgi parolingiz noto‘g‘ri kiritildi!' });
     }
 
-    const cleanNewPassword = newPassword.trim();
+    const cleanNewPassword = String(newPassword).trim();
     const newPasswordHash = await bcrypt.hash(cleanNewPassword, 10);
 
     const { error: updateError } = await supabase
@@ -207,7 +324,7 @@ app.post('/api/auth/logout', authenticate, async (req, res) => {
 });
 
 // ==========================================
-// 2. SUPER ADMIN ROUTES
+// 5. SUPER ADMIN ROUTES
 // ==========================================
 
 app.get('/api/admin/overview', authenticate, requireAdmin, checkConfig, async (req, res) => {
@@ -237,6 +354,8 @@ app.get('/api/admin/overview', authenticate, requireAdmin, checkConfig, async (r
 app.post('/api/admin/teachers', authenticate, requireAdmin, checkConfig, async (req, res) => {
   try {
     const { fullName, subject } = req.body;
+    if (!fullName?.trim()) return res.status(400).json({ error: 'Ism-familiya kiritilishi shart' });
+
     const cleanName = fullName.trim().split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'ustoz';
     const username = `ustoz_${cleanName}_${Math.floor(100 + Math.random() * 900)}`;
     const plainPassword = String(Math.floor(100000 + Math.random() * 900000));
@@ -246,14 +365,14 @@ app.post('/api/admin/teachers', authenticate, requireAdmin, checkConfig, async (
       .from('users')
       .insert({
         role: 'teacher',
-        full_name: fullName.trim(),
-        subject: subject?.trim() || 'Umumiy fan',
+        full_name: fullName.trim().slice(0, 100),
+        subject: subject?.trim().slice(0, 100) || 'Umumiy fan',
         username,
         password_hash: passwordHash,
         plain_password: plainPassword,
         is_active: true
       })
-      .select()
+      .select('id, full_name, subject, username')
       .single();
 
     if (error) throw error;
@@ -265,8 +384,15 @@ app.post('/api/admin/teachers', authenticate, requireAdmin, checkConfig, async (
 
 app.patch('/api/admin/teachers/:id/toggle-status', authenticate, requireAdmin, checkConfig, async (req, res) => {
   const { id } = req.params;
-  const { data: current } = await supabase.from('users').select('is_active').eq('id', id).single();
-  const { data: updated } = await supabase.from('users').update({ is_active: !current.is_active }).eq('id', id).select().single();
+  const { data: current } = await supabase.from('users').select('is_active').eq('id', id).eq('role', 'teacher').single();
+  if (!current) return res.status(404).json({ error: 'O‘qituvchi topilmadi' });
+
+  const { data: updated } = await supabase
+    .from('users')
+    .update({ is_active: !current.is_active })
+    .eq('id', id)
+    .select('id, full_name, is_active')
+    .single();
   res.json(updated);
 });
 
@@ -278,8 +404,11 @@ app.post('/api/admin/teachers/:id/reset-password', authenticate, requireAdmin, c
     .from('users')
     .update({ password_hash: passwordHash, plain_password: plainPassword })
     .eq('id', id)
+    .eq('role', 'teacher')
     .select('full_name, username')
     .single();
+
+  if (!teacher) return res.status(404).json({ error: 'O‘qituvchi topilmadi' });
   res.json({ fullName: teacher.full_name, username: teacher.username, plainPassword });
 });
 
@@ -287,26 +416,33 @@ app.post('/api/admin/announcements', authenticate, requireAdmin, checkConfig, as
   const { message } = req.body;
   await supabase.from('announcements').update({ is_active: false }).eq('is_active', true);
   if (!message?.trim()) return res.json({ announcement: null });
-  const { data } = await supabase.from('announcements').insert({ message: message.trim(), is_active: true }).select().single();
+  const { data } = await supabase.from('announcements').insert({ message: message.trim().slice(0, 500), is_active: true }).select().single();
   res.json({ announcement: data });
 });
 
 app.get('/api/announcement/active', authenticate, checkConfig, async (req, res) => {
-  const { data } = await supabase.from('announcements').select('*').eq('is_active', true).order('created_at', { ascending: false }).limit(1).single();
+  const { data } = await supabase.from('announcements').select('id, message, created_at').eq('is_active', true).order('created_at', { ascending: false }).limit(1).single();
   res.json(data || null);
 });
 
 // ==========================================
-// 3. AI LESSONS (MAJBURIY IZOH + TIL TANLASH)
+// 6. AI LESSONS, TUTOR & QUIZ ROUTES
 // ==========================================
 
-app.post('/api/lessons/generate', authenticate, checkConfig, upload.single('file'), async (req, res) => {
+app.post('/api/lessons/generate', aiLimiter, authenticate, checkConfig, upload.single('file'), async (req, res) => {
   try {
     if (!ai) return res.status(500).json({ error: 'GEMINI_API_KEY kiritilmagan!' });
     const { text, title, groupId, instruction, language = "O'zbek tili" } = req.body;
 
-    if (!instruction || !instruction.trim()) {
+    if (!instruction || !String(instruction).trim()) {
       return res.status(400).json({ error: 'Iltimos, AI uchun izoh (ko‘rsatma) kiriting!' });
+    }
+
+    // IDOR Himoya: Agar ustoz guruhga vazifa yuborayotgan bo'lsa, guruh egasi ekanligini tekshiramiz
+    if (groupId) {
+      if (req.user.role !== 'teacher' || !(await verifyGroupOwner(groupId, req.user.id))) {
+        return res.status(403).json({ error: 'Sizda ushbu guruhga vazifa yuborish huquqi yo‘q!' });
+      }
     }
 
     const contents = [];
@@ -318,23 +454,26 @@ app.post('/api/lessons/generate', authenticate, checkConfig, upload.single('file
         }
       });
     }
-    if (text && text.trim()) {
-      contents.push(`Asosiy matn:\n${text.trim()}`);
+    if (text && String(text).trim()) {
+      contents.push(`Asosiy matn:\n${String(text).trim().slice(0, 30000)}`);
     }
     if (contents.length === 0) {
       return res.status(400).json({ error: 'PDF, rasm yoki matn yuboring' });
     }
 
-    contents.push(`
-Foydalanuvchi ko'rsatmasi (izohi): "${instruction.trim()}"
-Natija tili: ${language}
+    const safeInstruction = String(instruction).trim().slice(0, 1000);
+    const safeLanguage = String(language).trim().slice(0, 50);
 
-Ushbu material va foydalanuvchi ko'rsatmasi asosida FAQAT "${language}" tilida ta'limiy paket yarat:
-- title: Mavzu sarlavhasi (${language} tilida)
-- summary: 5-7 ta asosiy g'oya (${language} tilida)
-- flashcards: 6 ta savol-javob kartochkasi (q va a, ${language} tilida)
-- quiz: 5 ta 4 variantli test savoli (question, options, correctIndex, explanation — barchasi ${language} tilida)
-- podcast_script: "Ali" va "Laylo" o'rtasida 6-8 replikali qiziqarli suhbat (${language} tilida)
+    contents.push(`
+Foydalanuvchi ko'rsatmasi (izohi): "${safeInstruction}"
+Natija tili: ${safeLanguage}
+
+Ushbu material va foydalanuvchi ko'rsatmasi asosida FAQAT "${safeLanguage}" tilida ta'limiy paket yarat:
+- title: Mavzu sarlavhasi (${safeLanguage} tilida)
+- summary: 5-7 ta asosiy g'oya (${safeLanguage} tilida)
+- flashcards: 6 ta savol-javob kartochkasi (q va a, ${safeLanguage} tilida)
+- quiz: 5 ta 4 variantli test savoli (question, options, correctIndex, explanation — barchasi ${safeLanguage} tilida)
+- podcast_script: "Ali" va "Laylo" o'rtasida 6-8 replikali qiziqarli suhbat (${safeLanguage} tilida)
 `);
 
     const response = await generateWithRetry({
@@ -385,7 +524,6 @@ Ushbu material va foydalanuvchi ko'rsatmasi asosida FAQAT "${language}" tilida t
     const parsed = JSON.parse(response.text);
     const enrichedFlashcards = parsed.flashcards.map((fc, idx) => ({ id: idx + 1, ...fc, interval: 1 }));
 
-    // Foydalanuvchi bazada mavjudligini tekshirish (foreign key xatosini oldini olish uchun)
     let validCreatorId = null;
     if (req.user.id && req.user.id !== 'super_admin') {
       const { data: existingUser } = await supabase
@@ -408,7 +546,7 @@ Ushbu material va foydalanuvchi ko'rsatmasi asosida FAQAT "${language}" tilida t
       .insert({
         creator_id: validCreatorId,
         group_id: groupId || null,
-        title: title || parsed.title,
+        title: title?.trim().slice(0, 200) || parsed.title,
         summary: parsed.summary,
         flashcards: enrichedFlashcards,
         quiz: parsed.quiz,
@@ -426,20 +564,23 @@ Ushbu material va foydalanuvchi ko'rsatmasi asosida FAQAT "${language}" tilida t
 
 app.get('/api/lessons', authenticate, checkConfig, async (req, res) => {
   let query = supabase.from('lessons').select('*').order('created_at', { ascending: false });
-  if (req.user.role === 'student') query = query.or(`creator_id.eq.${req.user.id},group_id.eq.${req.user.group_id}`);
-  else query = query.eq('creator_id', req.user.id);
+  if (req.user.role === 'student') {
+    query = query.or(`creator_id.eq.${req.user.id},group_id.eq.${req.user.group_id}`);
+  } else {
+    query = query.eq('creator_id', req.user.id);
+  }
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
 
-app.post('/api/ai/tutor', authenticate, async (req, res) => {
+app.post('/api/ai/tutor', aiLimiter, authenticate, async (req, res) => {
   try {
     if (!ai) return res.status(500).json({ error: 'GEMINI_API_KEY sozlanmagan!' });
     const { question, options, userAnswerIndex, correctIndex } = req.body;
     const response = await generateWithRetry({
       model: 'gemini-3.8-flash',
-      contents: `Savol: "${question}". O'quvchi tanlagan: "${options[userAnswerIndex]}". To'g'ri javob: "${options[correctIndex]}". 3-4 gapda oddiy hayotiy misol bilan savol berilgan tilda tushuntir.`
+      contents: `Savol: "${String(question).slice(0, 500)}". O'quvchi tanlagan: "${options?.[userAnswerIndex]}". To'g'ri javob: "${options?.[correctIndex]}". 3-4 gapda oddiy hayotiy misol bilan savol berilgan tilda tushuntir.`
     });
     res.json({ explanation: response.text });
   } catch (err) {
@@ -447,7 +588,7 @@ app.post('/api/ai/tutor', authenticate, async (req, res) => {
   }
 });
 
-app.post('/api/ai/weakness-detector', authenticate, checkConfig, async (req, res) => {
+app.post('/api/ai/weakness-detector', aiLimiter, authenticate, checkConfig, async (req, res) => {
   try {
     if (!ai) return res.status(500).json({ error: 'GEMINI_API_KEY sozlanmagan!' });
     const { data: attempts } = await supabase
@@ -476,14 +617,17 @@ app.post('/api/ai/weakness-detector', authenticate, checkConfig, async (req, res
 app.post('/api/quiz/submit', authenticate, checkConfig, async (req, res) => {
   try {
     const { lessonId, scorePercent, wrongIndices, tabSwitches } = req.body;
+    const safeScore = Math.max(0, Math.min(100, Number(scorePercent) || 0));
+
     await supabase.from('quiz_attempts').insert({
       student_id: req.user.id,
       lesson_id: lessonId,
-      score_percent: scorePercent,
-      wrong_question_indices: wrongIndices || [],
-      tab_switches: tabSwitches || 0
+      score_percent: safeScore,
+      wrong_question_indices: Array.isArray(wrongIndices) ? wrongIndices : [],
+      tab_switches: Math.max(0, Number(tabSwitches) || 0)
     });
-    const earnedXp = Math.round(scorePercent * 1.5);
+
+    const earnedXp = Math.round(safeScore * 1.5);
     const { data: user } = await supabase.from('users').select('xp_points').eq('id', req.user.id).single();
     const newXp = (user?.xp_points || 0) + earnedXp;
     await supabase.from('users').update({ xp_points: newXp }).eq('id', req.user.id);
@@ -495,15 +639,15 @@ app.post('/api/quiz/submit', authenticate, checkConfig, async (req, res) => {
 
 app.post('/api/tracker/ping', authenticate, checkConfig, async (req, res) => {
   try {
-    const { seconds = 30 } = req.body;
+    const safeSeconds = Math.min(60, Math.max(5, Number(req.body.seconds) || 30));
     const today = new Date().toISOString().split('T')[0];
     const { data: existing } = await supabase.from('study_logs').select('*').eq('student_id', req.user.id).eq('study_date', today).single();
-    let totalSeconds = seconds;
+    let totalSeconds = safeSeconds;
     if (existing) {
-      totalSeconds = existing.seconds_spent + seconds;
+      totalSeconds = existing.seconds_spent + safeSeconds;
       await supabase.from('study_logs').update({ seconds_spent: totalSeconds }).eq('id', existing.id);
     } else {
-      await supabase.from('study_logs').insert({ student_id: req.user.id, study_date: today, seconds_spent: seconds });
+      await supabase.from('study_logs').insert({ student_id: req.user.id, study_date: today, seconds_spent: safeSeconds });
     }
     await supabase.from('users').update({ is_online: true, last_seen: new Date().toISOString() }).eq('id', req.user.id);
     res.json({ minutesToday: Math.floor(totalSeconds / 60) });
@@ -513,26 +657,44 @@ app.post('/api/tracker/ping', authenticate, checkConfig, async (req, res) => {
 });
 
 // ==========================================
-// 4. TEACHER & PROFILE ROUTES
+// 7. TEACHER & PROFILE ROUTES (IDOR HIMOYASI BILAN)
 // ==========================================
 
-app.get('/api/teacher/groups', authenticate, checkConfig, async (req, res) => {
-  const { data, error } = await supabase.from('groups').select('*').eq('teacher_id', req.user.id).order('created_at', { ascending: false });
+app.get('/api/teacher/groups', authenticate, requireTeacher, checkConfig, async (req, res) => {
+  const { data, error } = await supabase
+    .from('groups')
+    .select('*')
+    .eq('teacher_id', req.user.id)
+    .order('created_at', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
 
-app.post('/api/teacher/groups', authenticate, checkConfig, async (req, res) => {
+app.post('/api/teacher/groups', authenticate, requireTeacher, checkConfig, async (req, res) => {
   const { name } = req.body;
-  const { data, error } = await supabase.from('groups').insert({ teacher_id: req.user.id, name }).select().single();
+  if (!name?.trim()) return res.status(400).json({ error: 'Guruh nomi kiritilishi shart' });
+
+  const { data, error } = await supabase
+    .from('groups')
+    .insert({ teacher_id: req.user.id, name: name.trim().slice(0, 100) })
+    .select()
+    .single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
 
-app.post('/api/teacher/groups/:groupId/students', authenticate, checkConfig, async (req, res) => {
+app.post('/api/teacher/groups/:groupId/students', authenticate, requireTeacher, checkConfig, async (req, res) => {
   try {
     const { fullName } = req.body;
     const { groupId } = req.params;
+
+    // IDOR Himoya: Faqat o'z guruhiga o'quvchi qo'sha oladi
+    if (!(await verifyGroupOwner(groupId, req.user.id))) {
+      return res.status(403).json({ error: 'Sizda ushbu guruhga o‘quvchi qo‘shish huquqi yo‘q!' });
+    }
+
+    if (!fullName?.trim()) return res.status(400).json({ error: 'Ism-familiya kiritilishi shart' });
+
     const cleanFirst = fullName.trim().split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'student';
     const username = `${cleanFirst}_${Math.floor(100 + Math.random() * 900)}`;
     const plainPassword = String(Math.floor(100000 + Math.random() * 900000));
@@ -542,13 +704,13 @@ app.post('/api/teacher/groups/:groupId/students', authenticate, checkConfig, asy
       .from('users')
       .insert({
         role: 'student',
-        full_name: fullName.trim(),
+        full_name: fullName.trim().slice(0, 100),
         username,
         password_hash: passwordHash,
         plain_password: plainPassword,
         group_id: groupId
       })
-      .select()
+      .select('id, full_name')
       .single();
 
     if (error) throw error;
@@ -558,13 +720,17 @@ app.post('/api/teacher/groups/:groupId/students', authenticate, checkConfig, asy
   }
 });
 
-app.post('/api/teacher/students/:studentId/reset-password', authenticate, checkConfig, async (req, res) => {
+app.post('/api/teacher/students/:studentId/reset-password', authenticate, requireTeacher, checkConfig, async (req, res) => {
   try {
-    if (req.user.role !== 'teacher') return res.status(403).json({ error: 'Ruxsat yo‘q' });
     const { studentId } = req.params;
     const { customPassword } = req.body;
 
-    const newPlainPassword = customPassword?.trim() || String(Math.floor(100000 + Math.random() * 900000));
+    // IDOR Himoya: Faqat o'z guruhidagi o'quvchi parolini o'zgartira oladi
+    if (!(await verifyStudentOwner(studentId, req.user.id))) {
+      return res.status(403).json({ error: 'Sizda ushbu o‘quvchi parolini o‘zgartirish huquqi yo‘q!' });
+    }
+
+    const newPlainPassword = customPassword?.trim().slice(0, 64) || String(Math.floor(100000 + Math.random() * 900000));
     const passwordHash = await bcrypt.hash(newPlainPassword, 10);
 
     const { data: updated, error } = await supabase
@@ -591,7 +757,7 @@ app.post('/api/profile/avatar', authenticate, checkConfig, upload.single('avatar
   try {
     if (!req.file) return res.status(400).json({ error: 'Rasm tanlanmadi' });
     if (!req.file.mimetype.startsWith('image/')) {
-      return res.status(400).json({ error: 'Faqat rasm fayli (JPG, PNG) yuklang' });
+      return res.status(400).json({ error: 'Faqat rasm fayli (JPG, PNG, WEBP) yuklang' });
     }
     if (req.file.size > 2 * 1024 * 1024) {
       return res.status(400).json({ error: 'Rasm 2 MB dan kichik bo‘lsin' });
@@ -610,9 +776,15 @@ app.post('/api/profile/avatar', authenticate, checkConfig, upload.single('avatar
   }
 });
 
-app.get('/api/teacher/groups/:groupId/dashboard', authenticate, checkConfig, async (req, res) => {
+app.get('/api/teacher/groups/:groupId/dashboard', authenticate, requireTeacher, checkConfig, async (req, res) => {
   try {
     const { groupId } = req.params;
+
+    // IDOR Himoya: Faqat o'z guruhi statistikasini ko'ra oladi
+    if (!(await verifyGroupOwner(groupId, req.user.id))) {
+      return res.status(403).json({ error: 'Sizda ushbu guruhni ko‘rish huquqi yo‘q!' });
+    }
+
     const today = new Date().toISOString().split('T')[0];
     const { data: students } = await supabase
       .from('users')
@@ -647,14 +819,28 @@ app.get('/api/teacher/groups/:groupId/dashboard', authenticate, checkConfig, asy
   }
 });
 
-app.get('/api/teacher/groups/:groupId/export-csv', authenticate, checkConfig, async (req, res) => {
+app.get('/api/teacher/groups/:groupId/export-csv', authenticate, requireTeacher, checkConfig, async (req, res) => {
   const { groupId } = req.params;
+
+  // IDOR Himoya: Faqat o'z guruhi CSV hisobotini yuklay oladi
+  if (!(await verifyGroupOwner(groupId, req.user.id))) {
+    return res.status(403).json({ error: 'Sizda ushbu guruh hisobotini yuklash huquqi yo‘q!' });
+  }
+
   const { data: students } = await supabase.from('users').select('full_name, username, xp_points, streak_days').eq('group_id', groupId);
   const header = 'Ism-Familiya,Login,XP Ball,Streak (kun)\n';
   const rows = (students || []).map(s => `"${s.full_name}",${s.username},${s.xp_points},${s.streak_days}`).join('\n');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="guruh_${groupId}_hisobot.csv"`);
   res.send('\uFEFF' + header + rows);
+});
+
+// Global xatoliklarni ushlash (Multer va CORS xatolari chiroyli JSON ko'rinishida qaytishi uchun)
+app.use((err, req, res, next) => {
+  if (err) {
+    return res.status(400).json({ error: err.message || 'So‘rovda xatolik yuz berdi' });
+  }
+  next();
 });
 
 const clientDistPath = path.join(__dirname, '../eduai-client/dist');
