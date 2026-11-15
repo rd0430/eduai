@@ -664,7 +664,7 @@ function EduAIApp() {
                 teacherView === 'tools' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700'
               }`}
             >
-              <Calculator className="w-4 h-4" /> Asboblar
+              <Calculator className="w-4 h-4" /> Jihozlar
             </button>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -990,7 +990,7 @@ function EduAIApp() {
   const studentNavItems = [
     { id: 'new', label: 'Yangi dars', icon: Plus },
     { id: 'library', label: 'Konspektlar', icon: FileText },
-    { id: 'tools', label: 'Asboblar', icon: Calculator },
+    { id: 'tools', label: 'Jihozlar', icon: Calculator },
     { id: 'stats', label: 'AI Tahlil', icon: BarChart3 }
   ];
 

@@ -422,7 +422,7 @@ export default function StudyTools() {
     <div className="max-w-6xl mx-auto space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-800">O‘quv Asboblari (Tools)</h2>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-800">O‘quv Jihozlari (Tools)</h2>
           <p className="text-xs text-slate-500">Hisoblash, grafik chizish va kimyoviy elementlar jadvali</p>
         </div>
 
