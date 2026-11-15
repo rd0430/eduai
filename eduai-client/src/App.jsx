@@ -4,8 +4,9 @@ import {
   BookOpen, Upload, FileText, CheckCircle2, XCircle, Sparkles,
   Users, Plus, Copy, Check, Clock, Flame, Trophy, Volume2, Square,
   AlertTriangle, Download, LogOut, BarChart3, Send, ShieldAlert,
-  ShieldCheck, KeyRound, Ban, Megaphone, Cpu, X, Camera, Lock, Menu
+  ShieldCheck, KeyRound, Ban, Megaphone, Cpu, X, Camera, Lock, Menu, Calculator
 } from 'lucide-react';
+import StudyTools from './StudyTools';
 
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api');
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -48,6 +49,7 @@ function EduAIApp() {
   const [minutesToday, setMinutesToday] = useState(0);
 
   // Teacher states
+  const [teacherView, setTeacherView] = useState<'groups' | 'tools'>('groups');
   const [groups, setGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [newGroupName, setNewGroupName] = useState('');
@@ -383,6 +385,7 @@ function EduAIApp() {
 
   const loadGroupDashboard = async (group) => {
     setSelectedGroup(group);
+    setTeacherView('groups');
     setMobileMenuOpen(false);
     const stats = await apiFetch(`/teacher/groups/${group.id}/dashboard`);
     setGroupStats(stats);
@@ -410,7 +413,7 @@ function EduAIApp() {
   };
 
   // ==========================================
-  // 1. LOGIN SCREEN (MOBILE & DESKTOP)
+  // 1. LOGIN SCREEN
   // ==========================================
   if (!token || !user) {
     return (
@@ -484,7 +487,7 @@ function EduAIApp() {
   }
 
   // ==========================================
-  // 2. ADMIN PANEL (MOBILE & DESKTOP)
+  // 2. ADMIN PANEL
   // ==========================================
   if (user.role === 'admin') {
     return (
@@ -639,7 +642,7 @@ function EduAIApp() {
   }
 
   // ==========================================
-  // 3. TEACHER PANEL (MOBILE & DESKTOP)
+  // 3. TEACHER PANEL (WITH STUDY TOOLS)
   // ==========================================
   if (user.role === 'teacher') {
     return (
@@ -655,13 +658,14 @@ function EduAIApp() {
           <div className="flex items-center gap-2 text-blue-600 font-bold text-lg">
             <BookOpen className="w-6 h-6" /> EduAI Ustoz
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
-              onClick={() => setShowProfileModal(true)}
-              className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
-              title="Parolni o'zgartirish"
+              onClick={() => { setTeacherView(teacherView === 'tools' ? 'groups' : 'tools'); setMobileMenuOpen(false); }}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 ${
+                teacherView === 'tools' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700'
+              }`}
             >
-              <KeyRound className="w-5 h-5" />
+              <Calculator className="w-4 h-4" /> Asboblar
             </button>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -673,7 +677,6 @@ function EduAIApp() {
         </header>
 
         <div className="flex flex-1 relative">
-          {/* Mobile Backdrop */}
           {mobileMenuOpen && (
             <div
               onClick={() => setMobileMenuOpen(false)}
@@ -693,6 +696,16 @@ function EduAIApp() {
               </div>
               <p className="text-xs text-slate-500 mb-5 font-mono">Login: {user.username}</p>
 
+              {/* Ustoz Asboblari Tugmasi */}
+              <button
+                onClick={() => { setTeacherView('tools'); setMobileMenuOpen(false); }}
+                className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 mb-4 transition ${
+                  teacherView === 'tools' ? 'bg-blue-600 text-white shadow-sm' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                }`}
+              >
+                <Calculator className="w-4 h-4 shrink-0" /> Kalkulyator va Jadval
+              </button>
+
               <form onSubmit={handleCreateGroup} className="flex gap-2 mb-4">
                 <input
                   type="text"
@@ -705,13 +718,15 @@ function EduAIApp() {
               </form>
 
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Guruhlarim</p>
-              <div className="space-y-1 max-h-[50vh] overflow-y-auto">
+              <div className="space-y-1 max-h-[45vh] overflow-y-auto">
                 {groups.map(g => (
                   <button
                     key={g.id}
                     onClick={() => loadGroupDashboard(g)}
                     className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 ${
-                      selectedGroup?.id === g.id ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-100'
+                      teacherView === 'groups' && selectedGroup?.id === g.id
+                        ? 'bg-blue-50 text-blue-600'
+                        : 'text-slate-600 hover:bg-slate-100'
                     }`}
                   >
                     <Users className="w-4 h-4 shrink-0" /> <span className="truncate">{g.name}</span>
@@ -734,7 +749,9 @@ function EduAIApp() {
           </aside>
 
           <main className="flex-1 p-4 sm:p-8 overflow-y-auto space-y-6 w-full">
-            {selectedGroup ? (
+            {teacherView === 'tools' ? (
+              <StudyTools />
+            ) : selectedGroup ? (
               <>
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                   <h1 className="text-xl sm:text-2xl font-bold text-slate-800">{selectedGroup.name} — Boshqaruv</h1>
@@ -808,7 +825,7 @@ function EduAIApp() {
                   </div>
                 </div>
 
-                {/* O'quvchilar jadvali (Mobil scroll bilan) */}
+                {/* O'quvchilar jadvali */}
                 <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
                   <div className="p-4 border-b border-slate-100 flex justify-between items-center">
                     <span className="font-bold text-slate-800 text-sm sm:text-base">O‘quvchilar ro‘yxati ({groupStats.students.length} ta)</span>
@@ -973,11 +990,12 @@ function EduAIApp() {
   }
 
   // ==========================================
-  // 4. STUDENT PANEL (MOBILE & DESKTOP)
+  // 4. STUDENT PANEL (WITH STUDY TOOLS)
   // ==========================================
   const studentNavItems = [
     { id: 'new', label: 'Yangi dars', icon: Plus },
     { id: 'library', label: 'Konspektlar', icon: FileText },
+    { id: 'tools', label: 'Asboblar', icon: Calculator },
     { id: 'stats', label: 'AI Tahlil', icon: BarChart3 }
   ];
 
@@ -1062,7 +1080,7 @@ function EduAIApp() {
               </div>
             </div>
 
-            {/* Stats Badges (Responsive grid on mobile) */}
+            {/* Stats Badges */}
             <div className="grid grid-cols-3 sm:flex items-center gap-2 sm:gap-3">
               <div className="bg-white border border-slate-200 px-2.5 sm:px-3.5 py-2 rounded-xl flex items-center justify-center gap-1.5 text-xs sm:text-sm font-semibold text-orange-600">
                 <Flame className="w-4 h-4 shrink-0" /> <span>{user.streak} kun</span>
@@ -1075,6 +1093,8 @@ function EduAIApp() {
               </div>
             </div>
           </div>
+
+          {activeNav === 'tools' && <StudyTools />}
 
           {activeNav === 'new' && (
             <div className="max-w-4xl mx-auto space-y-5 sm:space-y-6">
@@ -1115,7 +1135,7 @@ function EduAIApp() {
                     </button>
                   </div>
 
-                  {/* Lesson Tabs (2x2 grid on mobile, 4-col row on desktop) */}
+                  {/* Lesson Tabs */}
                   <div className="grid grid-cols-2 sm:flex gap-1.5 sm:gap-2 bg-white p-1.5 rounded-xl border border-slate-200">
                     {[
                       { id: 'summary', label: 'Qisqa konspekt' },
@@ -1319,12 +1339,12 @@ function EduAIApp() {
       </div>
 
       {/* Mobile Bottom Navigation Bar (Student) */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 flex justify-around items-center py-2 px-2 z-30">
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 flex justify-around items-center py-2 px-1 z-30">
         {studentNavItems.map(item => (
           <button
             key={item.id}
             onClick={() => handleStudentNavClick(item.id)}
-            className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl text-xs font-semibold transition ${
+            className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[11px] font-semibold transition ${
               activeNav === item.id ? 'text-blue-600 bg-blue-50' : 'text-slate-500'
             }`}
           >
@@ -1334,9 +1354,7 @@ function EduAIApp() {
         ))}
       </nav>
 
-      {/* ==========================================
-          O'QUVCHI PROFILI VA KATTALASHGAN RASM MODALI
-         ========================================== */}
+      {/* O'QUVCHI PROFILI VA KATTALASHGAN RASM MODALI */}
       {showProfileModal && (
         <div
           onClick={() => setShowProfileModal(false)}
