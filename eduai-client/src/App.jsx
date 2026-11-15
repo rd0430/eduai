@@ -742,17 +742,12 @@ function EduAIApp() {
   }
 
   // ==========================================
-  // 3. TEACHER PANEL
+  // 3. TEACHER PANEL (CHAP MENYU KOMPYUTERDA FIXED)
   // ==========================================
   if (user.role === 'teacher') {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col">
-        {announcement && (
-          <div className="bg-blue-600 text-white text-xs font-semibold py-2 px-4 text-center flex items-center justify-center gap-2">
-            <Megaphone className="w-4 h-4 shrink-0" /> <span>{announcement.message}</span>
-          </div>
-        )}
-
+      <div className="min-h-screen bg-slate-50">
+        {/* Mobil yuqori panel */}
         <header className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-2 text-blue-600 font-bold text-lg">
             <BookOpen className="w-6 h-6" /> EduAI Ustoz
@@ -776,25 +771,90 @@ function EduAIApp() {
           </div>
         </header>
 
-        <div className="flex flex-1 relative">
-          {mobileMenuOpen && (
-            <div
-              onClick={() => setMobileMenuOpen(false)}
-              className="fixed inset-0 bg-slate-900/40 z-30 lg:hidden"
-            />
+        {/* Mobil fon qorayishi */}
+        {mobileMenuOpen && (
+          <div
+            onClick={() => setMobileMenuOpen(false)}
+            className="fixed inset-0 bg-slate-900/40 z-30 lg:hidden"
+          />
+        )}
+
+        {/* CHAP YON MENYU (Kompyuterda fixed, telefonda drawer) */}
+        <aside
+          className={`${
+            mobileMenuOpen ? 'flex' : 'hidden lg:flex'
+          } fixed inset-y-0 left-0 z-40 w-72 lg:w-64 bg-white border-r border-slate-200 p-5 flex-col justify-between overflow-y-auto`}
+        >
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-blue-600 font-bold text-xl">
+                <BookOpen className="w-6 h-6" /> EduAI Ustoz
+              </div>
+              <ThemeToggleBtn compact />
+            </div>
+            <p className="text-xs text-slate-500 mb-5 font-mono">Login: {user.username}</p>
+
+            <button
+              onClick={() => { setTeacherView('tools'); setMobileMenuOpen(false); }}
+              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 mb-4 transition ${
+                teacherView === 'tools' ? 'bg-blue-600 text-white shadow-sm' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+              }`}
+            >
+              <Calculator className="w-4 h-4 shrink-0" /> Jihozlar (Kalkulyator / Jadval)
+            </button>
+
+            <form onSubmit={handleCreateGroup} className="flex gap-2 mb-4">
+              <input
+                type="text"
+                placeholder="Guruh (Fizika 9-A)"
+                value={newGroupName}
+                onChange={e => setNewGroupName(e.target.value)}
+                className="w-full px-3 py-2 text-sm border rounded-lg"
+              />
+              <button className="bg-blue-600 text-white p-2 rounded-lg shrink-0"><Plus className="w-4 h-4" /></button>
+            </form>
+
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Guruhlarim</p>
+            <div className="space-y-1">
+              {groups.map(g => (
+                <button
+                  key={g.id}
+                  onClick={() => loadGroupDashboard(g)}
+                  className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 ${
+                    teacherView === 'groups' && selectedGroup?.id === g.id
+                      ? 'bg-blue-50 text-blue-600'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Users className="w-4 h-4 shrink-0" /> <span className="truncate">{g.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-4 border-t border-slate-100 mt-4">
+            <button
+              onClick={() => { setShowProfileModal(true); setMobileMenuOpen(false); }}
+              className="w-full flex items-center gap-2 text-slate-600 hover:text-blue-600 text-sm font-medium py-1"
+            >
+              <KeyRound className="w-4 h-4" /> Parolni o‘zgartirish
+            </button>
+            <button onClick={handleLogout} className="w-full flex items-center gap-2 text-slate-500 hover:text-red-600 text-sm py-1">
+              <LogOut className="w-4 h-4" /> Chiqish
+            </button>
+          </div>
+        </aside>
+
+        {/* ASOSIY KONTENT (lg:pl-64 bilan menyu yonida turadi) */}
+        <div className="lg:pl-64 min-h-screen flex flex-col">
+          {announcement && (
+            <div className="bg-blue-600 text-white text-xs font-semibold py-2 px-4 text-center flex items-center justify-center gap-2">
+              <Megaphone className="w-4 h-4 shrink-0" /> <span>{announcement.message}</span>
+            </div>
           )}
 
-          <aside
-          
-          
-            className={`${
-              mobileMenuOpen ? 'flex' : 'hidden lg:flex'
-            } fixed inset-y-0 left-0 z-40 w-72 lg:w-64 bg-white border-r border-slate-200 p-5 flex-col justify-between overflow-y-auto`}
-          >
-          </aside>
-
-<main className="flex-1 lg:ml-64 p-4 sm:p-8 overflow-y-auto space-y-6 w-full">            
-  {teacherView === 'tools' ? (
+          <main className="flex-1 p-4 sm:p-8 space-y-6 w-full">
+            {teacherView === 'tools' ? (
               <StudyTools />
             ) : selectedGroup ? (
               <>
@@ -892,7 +952,6 @@ function EduAIApp() {
                   </div>
                 </div>
 
-                {/* O'quvchilar jadvali (parollar yashirilgan) */}
                 <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
                   <div className="p-4 border-b border-slate-100 flex justify-between items-center">
                     <span className="font-bold text-slate-800 text-sm sm:text-base">O‘quvchilar ro‘yxati ({groupStats.students.length} ta)</span>
@@ -988,7 +1047,7 @@ function EduAIApp() {
               </>
             ) : (
               <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center space-y-3">
-                <p className="text-slate-600 text-sm">Guruh yaratish yoki tanlash uchun menyuni oching.</p>
+                <p className="text-slate-600 text-sm">Guruh yaratish yoki tanlash uchun chap menyudan foydalaning.</p>
                 <button
                   onClick={() => setMobileMenuOpen(true)}
                   className="lg:hidden bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold"
@@ -1056,7 +1115,7 @@ function EduAIApp() {
   }
 
   // ==========================================
-  // 4. STUDENT PANEL ("Jihozlar" bilan)
+  // 4. STUDENT PANEL (CHAP MENYU KOMPYUTERDA FIXED)
   // ==========================================
   const studentNavItems = [
     { id: 'new', label: 'Yangi dars', icon: Plus },
@@ -1073,13 +1132,8 @@ function EduAIApp() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col pb-20 lg:pb-0">
-      {announcement && (
-        <div className="bg-blue-600 text-white text-xs font-semibold py-2 px-4 text-center flex items-center justify-center gap-2">
-          <Megaphone className="w-4 h-4 shrink-0" /> <span>{announcement.message}</span>
-        </div>
-      )}
-
+    <div className="min-h-screen bg-slate-50 pb-20 lg:pb-0">
+      {/* Mobil yuqori panel */}
       <header className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-2 text-blue-600 font-bold text-lg">
           <BookOpen className="w-6 h-6" /> EduAI
@@ -1092,36 +1146,43 @@ function EduAIApp() {
         </div>
       </header>
 
-      <div className="flex flex-1">
-<aside className="hidden lg:flex fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-slate-200 p-5 flex-col justify-between overflow-y-auto">          
-  <div>
-    <main className="flex-1 lg:ml-64 p-4 sm:p-8 overflow-y-auto w-full"></main>
-            <div className="flex items-center justify-between mb-8">
-              <div className="flex items-center gap-2 text-blue-600 font-bold text-xl">
-                <BookOpen className="w-6 h-6" /> EduAI
-              </div>
-              <ThemeToggleBtn compact />
+      {/* CHAP YON MENYU (Kompyuterda fixed) */}
+      <aside className="hidden lg:flex fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-slate-200 p-5 flex-col justify-between overflow-y-auto">
+        <div>
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-2 text-blue-600 font-bold text-xl">
+              <BookOpen className="w-6 h-6" /> EduAI
             </div>
-            <nav className="space-y-1.5">
-              {studentNavItems.map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => handleStudentNavClick(item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${
-                    activeNav === item.id ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <item.icon className="w-4 h-4" /> {item.label}
-                </button>
-              ))}
-            </nav>
+            <ThemeToggleBtn compact />
           </div>
-          <button onClick={handleLogout} className="flex items-center gap-2 text-slate-500 hover:text-red-600 text-sm">
-            <LogOut className="w-4 h-4" /> Chiqish
-          </button>
-        </aside>
+          <nav className="space-y-1.5">
+            {studentNavItems.map(item => (
+              <button
+                key={item.id}
+                onClick={() => handleStudentNavClick(item.id)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${
+                  activeNav === item.id ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <item.icon className="w-4 h-4" /> {item.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+        <button onClick={handleLogout} className="flex items-center gap-2 text-slate-500 hover:text-red-600 text-sm">
+          <LogOut className="w-4 h-4" /> Chiqish
+        </button>
+      </aside>
 
-        <main className="flex-1 p-4 sm:p-8 overflow-y-auto w-full">
+      {/* ASOSIY KONTENT (lg:pl-64 bilan menyu yonida turadi) */}
+      <div className="lg:pl-64 min-h-screen flex flex-col">
+        {announcement && (
+          <div className="bg-blue-600 text-white text-xs font-semibold py-2 px-4 text-center flex items-center justify-center gap-2">
+            <Megaphone className="w-4 h-4 shrink-0" /> <span>{announcement.message}</span>
+          </div>
+        )}
+
+        <main className="flex-1 p-4 sm:p-8 w-full">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6 sm:mb-8">
             <div className="flex items-center gap-3">
               <button
@@ -1438,6 +1499,7 @@ function EduAIApp() {
         </main>
       </div>
 
+      {/* Mobil pastki navigatsiya */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 flex justify-around items-center py-2 px-1 z-30">
         {studentNavItems.map(item => (
           <button
@@ -1453,6 +1515,7 @@ function EduAIApp() {
         ))}
       </nav>
 
+      {/* Profil modali */}
       {showProfileModal && (
         <div
           onClick={() => setShowProfileModal(false)}
