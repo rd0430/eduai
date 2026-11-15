@@ -785,10 +785,13 @@ function EduAIApp() {
           )}
 
           <aside
-            className={`fixed inset-y-0 left-0 z-40 w-72 lg:w-64 bg-white border-r border-slate-200 p-5 flex flex-col justify-between overflow-y-auto transition-transform duration-200 ease-in-out ${
-              mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-            }`}
-          ></aside>
+          
+          
+            className={`${
+              mobileMenuOpen ? 'flex' : 'hidden lg:flex'
+            } fixed inset-y-0 left-0 z-40 w-72 lg:w-64 bg-white border-r border-slate-200 p-5 flex-col justify-between overflow-y-auto`}
+          >
+          </aside>
 
 <main className="flex-1 lg:ml-64 p-4 sm:p-8 overflow-y-auto space-y-6 w-full">            
   {teacherView === 'tools' ? (
