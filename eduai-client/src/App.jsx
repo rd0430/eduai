@@ -785,13 +785,13 @@ function EduAIApp() {
           )}
 
           <aside
-            className={`fixed lg:sticky lg:top-0 lg:h-screen shrink-0 inset-y-0 left-0 z-40 w-72 lg:w-64 bg-white border-r border-slate-200 p-5 flex flex-col justify-between overflow-y-auto transform transition-transform duration-200 ease-in-out ${
+            className={`fixed inset-y-0 left-0 z-40 w-72 lg:w-64 bg-white border-r border-slate-200 p-5 flex flex-col justify-between overflow-y-auto transition-transform duration-200 ease-in-out ${
               mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
             }`}
           ></aside>
 
-          <main className="flex-1 p-4 sm:p-8 overflow-y-auto space-y-6 w-full">
-            {teacherView === 'tools' ? (
+<main className="flex-1 lg:ml-64 p-4 sm:p-8 overflow-y-auto space-y-6 w-full">            
+  {teacherView === 'tools' ? (
               <StudyTools />
             ) : selectedGroup ? (
               <>
@@ -1090,8 +1090,9 @@ function EduAIApp() {
       </header>
 
       <div className="flex flex-1">
-        <aside className="hidden lg:flex w-64 bg-white border-r border-slate-200 p-5 flex-col justify-between">
-          <div>
+<aside className="hidden lg:flex fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-slate-200 p-5 flex-col justify-between overflow-y-auto">          
+  <div>
+    <main className="flex-1 lg:ml-64 p-4 sm:p-8 overflow-y-auto w-full"></main>
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-2 text-blue-600 font-bold text-xl">
                 <BookOpen className="w-6 h-6" /> EduAI
