@@ -805,7 +805,7 @@ function EduAIApp() {
 
             <a
               href="https://peakmock.up.railway.app"
-              target="_blank"
+              target="blank"
               rel="noopener noreferrer"
               onClick={() => setMobileMenuOpen(false)}
               className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-between mb-4 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/70 transition"
