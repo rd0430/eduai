@@ -5,7 +5,7 @@ import {
   Users, Plus, Copy, Check, Clock, Flame, Trophy, Volume2, Square,
   AlertTriangle, Download, LogOut, BarChart3, Send, ShieldAlert,
   ShieldCheck, KeyRound, Ban, Megaphone, Cpu, X, Camera, Lock, Menu,
-  Calculator, Moon, Sun
+  Calculator, Moon, Sun, ExternalLink
 } from 'lucide-react';
 import StudyTools from './StudyTools';
 
@@ -796,12 +796,26 @@ function EduAIApp() {
 
             <button
               onClick={() => { setTeacherView('tools'); setMobileMenuOpen(false); }}
-              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 mb-4 transition ${
+              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 mb-2 transition ${
                 teacherView === 'tools' ? 'bg-blue-600 text-white shadow-sm' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
               }`}
             >
               <Calculator className="w-4 h-4 shrink-0" /> Jihozlar (Kalkulyator / Jadval)
             </button>
+
+            <a
+              href="https://peakmock.up.railway.app"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setMobileMenuOpen(false)}
+              className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-between mb-4 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/70 transition"
+            >
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                Peakmock
+              </span>
+              <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+            </a>
 
             <form onSubmit={handleCreateGroup} className="flex gap-2 mb-4">
               <input
@@ -1121,7 +1135,8 @@ function EduAIApp() {
     { id: 'new', label: 'Yangi dars', icon: Plus },
     { id: 'library', label: 'Konspektlar', icon: FileText },
     { id: 'tools', label: 'Jihozlar', icon: Calculator },
-    { id: 'stats', label: 'AI Tahlil', icon: BarChart3 }
+    { id: 'stats', label: 'AI Tahlil', icon: BarChart3 },
+    { id: 'peakmock', label: 'Peakmock', icon: ExternalLink, href: 'https://peakmock.up.railway.app' }
   ];
 
   const handleStudentNavClick = (id) => {
@@ -1156,17 +1171,33 @@ function EduAIApp() {
             <ThemeToggleBtn compact />
           </div>
           <nav className="space-y-1.5">
-            {studentNavItems.map(item => (
-              <button
-                key={item.id}
-                onClick={() => handleStudentNavClick(item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${
-                  activeNav === item.id ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <item.icon className="w-4 h-4" /> {item.label}
-              </button>
-            ))}
+            {studentNavItems.map(item =>
+              item.href ? (
+                <a
+                  key={item.id}
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium text-emerald-700 bg-emerald-50/70 hover:bg-emerald-100 border border-emerald-200/70 transition"
+                >
+                  <span className="flex items-center gap-3">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    {item.label}
+                  </span>
+                  <item.icon className="w-4 h-4" />
+                </a>
+              ) : (
+                <button
+                  key={item.id}
+                  onClick={() => handleStudentNavClick(item.id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${
+                    activeNav === item.id ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <item.icon className="w-4 h-4" /> {item.label}
+                </button>
+              )
+            )}
           </nav>
         </div>
         <button onClick={handleLogout} className="flex items-center gap-2 text-slate-500 hover:text-red-600 text-sm">
@@ -1501,18 +1532,31 @@ function EduAIApp() {
 
       {/* Mobil pastki navigatsiya */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 flex justify-around items-center py-2 px-1 z-30">
-        {studentNavItems.map(item => (
-          <button
-            key={item.id}
-            onClick={() => handleStudentNavClick(item.id)}
-            className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[11px] font-semibold transition ${
-              activeNav === item.id ? 'text-blue-600 bg-blue-50' : 'text-slate-500'
-            }`}
-          >
-            <item.icon className="w-5 h-5 mb-0.5" />
-            <span>{item.label}</span>
-          </button>
-        ))}
+        {studentNavItems.map(item =>
+          item.href ? (
+            <a
+              key={item.id}
+              href={item.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[11px] font-semibold text-emerald-700 bg-emerald-50/80 transition"
+            >
+              <item.icon className="w-5 h-5 mb-0.5" />
+              <span>{item.label}</span>
+            </a>
+          ) : (
+            <button
+              key={item.id}
+              onClick={() => handleStudentNavClick(item.id)}
+              className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[11px] font-semibold transition ${
+                activeNav === item.id ? 'text-blue-600 bg-blue-50' : 'text-slate-500'
+              }`}
+            >
+              <item.icon className="w-5 h-5 mb-0.5" />
+              <span>{item.label}</span>
+            </button>
+          )
+        )}
       </nav>
 
       {/* Profil modali */}
