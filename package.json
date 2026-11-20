@@ -6,7 +6,9 @@
     "start": "cd eduai-backend && node server.js"
   },
   "dependencies": {
+    "axios": "^1.21.1",
     "express-rate-limit": "^8.7.4",
-    "helmet": "^8.3.0"
+    "helmet": "^8.3.0",
+    "lucide-react": "^1.77.0"
   }
 }
