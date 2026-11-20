@@ -10,6 +10,8 @@ import {
 import StudyTools from './StudyTools.jsx';
 
 const API = import.meta.env.VITE_API_URL || '/api';
+const TELEGRAM_CONTACT_URL = 'https://t.me/roz1matoff_me';
+const TELEGRAM_CONTACT_HANDLE = '@roz1matoff_me';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
@@ -194,9 +196,23 @@ export default function App() {
     }
   };
 
-  if (!currentUser) {
+if (!currentUser) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-4 relative">
+        <a
+          href={TELEGRAM_CONTACT_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="fixed top-4 right-4 inline-flex items-center gap-2 bg-white hover:bg-sky-50 border border-slate-200 hover:border-sky-300 text-slate-800 px-3.5 py-2 rounded-xl text-xs font-semibold shadow-sm transition z-10"
+        >
+          <span className="w-6 h-6 rounded-lg bg-sky-500 text-white flex items-center justify-center">
+            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+              <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
+            </svg>
+          </span>
+          <span>Aloqa: <b className="text-sky-600">{TELEGRAM_CONTACT_HANDLE}</b></span>
+        </a>
+
         <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xl">
           <div className="text-center mb-6">
             <div className="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-3 font-extrabold text-xl shadow-md">
@@ -268,6 +284,9 @@ export default function App() {
 
   // ==========================================
   // CHAP TOMONDA FIXED SIDEBAR + RESPONSIVE DRAWER
+  // ==========================================
+ // ==========================================
+  // CHAP TOMONDA FIXED SIDEBAR + O'NG TEPADA TELEGRAM CONTACT
   // ==========================================
   const renderSidebarLayout = (navItems, roleSubtitle, children) => (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col lg:flex-row">
@@ -353,7 +372,8 @@ export default function App() {
       </aside>
 
       <div className="flex-1 lg:ml-64 min-w-0 flex flex-col">
-        <header className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-xs">
+        {/* Mobil tepa bar */}
+        <header className="lg:hidden bg-white border-b border-slate-200 px-3.5 py-2.5 flex items-center justify-between sticky top-0 z-20 shadow-xs">
           <button
             onClick={() => setMobileMenuOpen(true)}
             className="p-2 rounded-xl bg-slate-100 text-slate-700"
@@ -361,19 +381,45 @@ export default function App() {
           >
             <Menu size={20} />
           </button>
+
           <div className="text-center">
-            <span className="font-extrabold text-slate-900 block leading-none">EduAI</span>
+            <span className="font-extrabold text-slate-900 block leading-none text-sm">EduAI</span>
             <span className="text-[10px] text-slate-500">{roleSubtitle}</span>
           </div>
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className="p-2 rounded-xl bg-slate-100 text-slate-700"
+
+          <a
+            href={TELEGRAM_CONTACT_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 bg-sky-500 hover:bg-sky-600 text-white px-2.5 py-1.5 rounded-xl text-xs font-semibold shadow-xs transition"
+            title="Admin bilan Telegramda bog'lanish"
           >
-            {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
+            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+              <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
+            </svg>
+            <span>Bog'lanish</span>
+          </a>
         </header>
 
-        <main className="p-3.5 sm:p-6 max-w-6xl w-full mx-auto space-y-5">
+        {/* Desktop o'ng tomon tepa Contact paneli */}
+        <div className="hidden lg:flex items-center justify-end px-6 pt-4 max-w-6xl w-full mx-auto">
+          <a
+            href={TELEGRAM_CONTACT_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 bg-white hover:bg-sky-50 border border-slate-200 hover:border-sky-300 text-slate-800 px-3.5 py-2 rounded-xl text-xs font-semibold shadow-2xs transition"
+          >
+            <span className="w-6 h-6 rounded-lg bg-sky-500 text-white flex items-center justify-center shrink-0">
+              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
+              </svg>
+            </span>
+            <span className="text-slate-500">Aloqa / Yordam:</span>
+            <span className="text-sky-600 font-bold">{TELEGRAM_CONTACT_HANDLE}</span>
+          </a>
+        </div>
+
+        <main className="p-3.5 sm:p-6 pt-3 sm:pt-4 max-w-6xl w-full mx-auto space-y-5">
           {children}
         </main>
       </div>
