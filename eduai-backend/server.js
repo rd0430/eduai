@@ -129,9 +129,8 @@ function getPaymentStatus(isPaid, dueDateStr) {
   return { color: 'green', label: `${diffDays} kun bor`, isOverdue: false };
 }
 
-// Multi-tenancy: Foydalanuvchi qaysi markazga tegishli ekanligini aniqlash
 function getTenantOwnerId(user) {
-  if (!user || user.role === 'admin') return null; // Super Admin barchasini ko'radi
+  if (!user || user.role === 'admin') return null;
   if (user.role === 'center_owner') return user.id;
   return user.owner_id || null;
 }
@@ -214,7 +213,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // ==========================================
-// 4. AUTHENTICATION (FAQAT LOGIN VA GMAIL ADMIN)
+// 4. AUTHENTICATION (LOGIN + GMAIL ADMIN)
 // ==========================================
 app.get('/api/auth/google-config', (req, res) => {
   res.json({ googleClientId: process.env.GOOGLE_CLIENT_ID || '' });
@@ -267,7 +266,7 @@ app.post('/api/auth/login', loginLimiter, checkConfig, async (req, res) => {
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, full_name, subject, username, role, group_id, owner_id, xp_points, streak_days, last_active_date, is_active, password_hash, avatar_url')
+      .select('id, full_name, subject, salary_percent, username, role, group_id, owner_id, xp_points, streak_days, last_active_date, is_active, password_hash, avatar_url')
       .eq('username', String(username).trim().toLowerCase())
       .single();
 
@@ -299,6 +298,7 @@ app.post('/api/auth/login', loginLimiter, checkConfig, async (req, res) => {
         id: user.id,
         fullName: user.full_name,
         subject: user.subject,
+        salaryPercent: user.salary_percent,
         username: user.username,
         role: user.role,
         groupId: user.group_id,
@@ -321,7 +321,7 @@ app.post('/api/auth/logout', authenticate, async (req, res) => {
 });
 
 // ==========================================
-// 5. ADMIN (GMAIL) -> CENTER OWNER YARATISH
+// 5. ADMIN -> CENTER OWNER YARATISH
 // ==========================================
 app.post('/api/admin/center-owners', authenticate, requireSuperAdmin, checkConfig, async (req, res) => {
   try {
@@ -360,11 +360,11 @@ app.post('/api/admin/center-owners', authenticate, requireSuperAdmin, checkConfi
 });
 
 // ==========================================
-// 6. CENTER OWNER -> O'QITUVCHI VA O'QUVCHI LOGIN-PAROL YARATISH (IZOLYATSIYA BILAN)
+// 6. CENTER OWNER -> O'QITUVCHI VA O'QUVCHI YARATISH
 // ==========================================
 app.post('/api/owner/teachers', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   try {
-    const { fullName, subject, ownerId } = req.body;
+    const { fullName, subject, salaryPercent, ownerId } = req.body;
     if (!fullName?.trim()) return res.status(400).json({ error: 'O‘qituvchi ism-familiyasi shart' });
 
     const tenantOwnerId = req.user.role === 'center_owner' ? req.user.id : (ownerId || null);
@@ -372,6 +372,7 @@ app.post('/api/owner/teachers', authenticate, requireAdminOrOwner, checkConfig, 
     const username = `ustoz_${cleanFirst}_${Math.floor(100 + Math.random() * 900)}`;
     const plainPassword = String(Math.floor(100000 + Math.random() * 900000));
     const passwordHash = await bcrypt.hash(plainPassword, 10);
+    const percent = Math.min(100, Math.max(0, Number(salaryPercent) || 40));
 
     const { data: teacher, error } = await supabase
       .from('users')
@@ -380,11 +381,12 @@ app.post('/api/owner/teachers', authenticate, requireAdminOrOwner, checkConfig, 
         owner_id: tenantOwnerId,
         full_name: fullName.trim().slice(0, 120),
         subject: subject?.trim().slice(0, 80) || 'Umumiy fan',
+        salary_percent: percent,
         username,
         password_hash: passwordHash,
         is_active: true
       })
-      .select('id, full_name, subject, username')
+      .select('id, full_name, subject, salary_percent, username')
       .single();
 
     if (error) throw error;
@@ -392,9 +394,31 @@ app.post('/api/owner/teachers', authenticate, requireAdminOrOwner, checkConfig, 
       id: teacher.id,
       fullName: teacher.full_name,
       subject: teacher.subject,
+      salaryPercent: teacher.salary_percent,
       username,
       plainPassword
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/owner/teachers/:id/salary-percent', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
+  try {
+    const tenantOwnerId = getTenantOwnerId(req.user);
+    const percent = Math.min(100, Math.max(0, Number(req.body.salaryPercent) || 0));
+
+    let query = supabase
+      .from('users')
+      .update({ salary_percent: percent })
+      .eq('id', req.params.id)
+      .eq('role', 'teacher');
+
+    if (tenantOwnerId) query = query.eq('owner_id', tenantOwnerId);
+
+    const { error } = await query;
+    if (error) throw error;
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -463,20 +487,20 @@ app.post('/api/users/:id/reset-password', authenticate, requireAdminOrOwner, che
 });
 
 // ==========================================
-// 7. IZOLYATSIYA QILINGAN MARKAZ MA'LUMOTLARI VA MOLIYA
+// 7. MARKAZ MA'LUMOTLARI, MOLIYA VA O'QITUVCHI OYLIGI
 // ==========================================
 app.get('/api/center/data', authenticate, checkConfig, async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
+    const currentMonthPrefix = today.slice(0, 7);
     const tenantOwnerId = getTenantOwnerId(req.user);
 
     let branchQ = supabase.from('branches').select('*').order('created_at', { ascending: true });
     let groupQ = supabase.from('groups').select('*').order('created_at', { ascending: false });
-    let userQ = supabase.from('users').select('id, role, full_name, subject, username, is_active, group_id, owner_id, payment_due_date, is_paid, parent_telegram_chat_id, xp_points, streak_days');
+    let userQ = supabase.from('users').select('id, role, full_name, subject, salary_percent, username, is_active, group_id, owner_id, payment_due_date, is_paid, parent_telegram_chat_id, xp_points, streak_days');
     let attQ = supabase.from('attendance').select('*').order('attendance_date', { ascending: false });
-    let payQ = supabase.from('payments').select('*').order('paid_at', { ascending: false }).limit(200);
+    let payQ = supabase.from('payments').select('*').order('paid_at', { ascending: false }).limit(300);
 
-    // Multi-Tenancy filtrlash: har bir markaz faqat o'z ma'lumotlarini ko'radi
     if (tenantOwnerId) {
       branchQ = branchQ.eq('owner_id', tenantOwnerId);
       groupQ = groupQ.eq('owner_id', tenantOwnerId);
@@ -525,11 +549,6 @@ app.get('/api/center/data', authenticate, checkConfig, async (req, res) => {
       };
     });
 
-    const enrichedTeachers = teachers.map(t => ({
-      ...t,
-      assignedGroups: enrichedGroups.filter(g => g.teacher_id === t.id || g.substitute_teacher_id === t.id)
-    }));
-
     const enrichedPayments = (payments || []).map(p => ({
       ...p,
       amount: Number(p.amount || 0),
@@ -537,13 +556,34 @@ app.get('/api/center/data', authenticate, checkConfig, async (req, res) => {
       groupName: groupMap[p.group_id]?.name || 'Guruh'
     }));
 
-    // Moliya (Kassa) statistikasi
-    const currentMonthPrefix = today.slice(0, 7); // YYYY-MM
+    const enrichedTeachers = teachers.map(t => {
+      const myMainGroups = enrichedGroups.filter(g => g.teacher_id === t.id);
+      const myMainGroupIds = new Set(myMainGroups.map(g => g.id));
+      const percent = Number(t.salary_percent ?? 40);
+
+      const groupPayments = enrichedPayments.filter(p => myMainGroupIds.has(p.group_id));
+      const monthlyGroupRevenue = groupPayments
+        .filter(p => String(p.paid_at || '').startsWith(currentMonthPrefix))
+        .reduce((sum, p) => sum + p.amount, 0);
+
+      const totalGroupRevenue = groupPayments.reduce((sum, p) => sum + p.amount, 0);
+
+      return {
+        ...t,
+        salaryPercent: percent,
+        assignedGroups: enrichedGroups.filter(g => g.teacher_id === t.id || g.substitute_teacher_id === t.id),
+        monthlyGroupRevenue,
+        monthlySalary: Math.round((monthlyGroupRevenue * percent) / 100),
+        totalSalary: Math.round((totalGroupRevenue * percent) / 100)
+      };
+    });
+
     const monthlyIncome = enrichedPayments
       .filter(p => String(p.paid_at || '').startsWith(currentMonthPrefix))
       .reduce((sum, p) => sum + p.amount, 0);
 
     const totalIncome = enrichedPayments.reduce((sum, p) => sum + p.amount, 0);
+    const totalTeachersMonthlySalary = enrichedTeachers.reduce((sum, t) => sum + t.monthlySalary, 0);
 
     const overdueDebt = enrichedStudents
       .filter(s => s.paymentStatus?.color === 'red')
@@ -565,7 +605,8 @@ app.get('/api/center/data', authenticate, checkConfig, async (req, res) => {
         monthlyIncome,
         totalIncome,
         overdueDebt,
-        upcomingExpected
+        upcomingExpected,
+        totalTeachersMonthlySalary
       }
     });
   } catch (err) {
@@ -648,7 +689,7 @@ app.put('/api/groups/:id/substitute', authenticate, requireAdminOrOwner, checkCo
   res.json({ ok: true });
 });
 
-// O'quvchini guruhga yozish / transfer / to'lov (Kassaga avtomatik kirim bilan) / o'chirish
+// O'quvchini guruhga yozish / transfer / to'lov / o'chirish
 app.put('/api/students/:id/enroll', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   const { groupId, paymentDueDate, parentTelegramChatId } = req.body;
   const tenantOwnerId = getTenantOwnerId(req.user);
@@ -702,7 +743,6 @@ app.put('/api/students/:id/pay', authenticate, requireAdminOrOwner, checkConfig,
       .eq('id', req.params.id);
     if (error) throw error;
 
-    // Kassaga (payments jadvaliga) kirim yozish
     if (amount > 0) {
       await supabase.from('payments').insert({
         owner_id: student.owner_id || tenantOwnerId,
@@ -720,7 +760,6 @@ app.put('/api/students/:id/pay', authenticate, requireAdminOrOwner, checkConfig,
   }
 });
 
-// Kassaga qo'lda kirim qo'shish va kirimni o'chirish
 app.post('/api/payments', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   try {
     const { studentId, amount, paymentMethod, note } = req.body;

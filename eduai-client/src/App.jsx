@@ -32,19 +32,25 @@ export default function App() {
     students: [],
     attendance: [],
     payments: [],
-    financeSummary: { monthlyIncome: 0, totalIncome: 0, overdueDebt: 0, upcomingExpected: 0 }
+    financeSummary: {
+      monthlyIncome: 0,
+      totalIncome: 0,
+      overdueDebt: 0,
+      upcomingExpected: 0,
+      totalTeachersMonthlySalary: 0
+    }
   });
 
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState(null);
-  const [ownerTab, setOwnerTab] = useState('branches'); // 'branches' | 'accounts' | 'finance' | 'owners'
+  const [ownerTab, setOwnerTab] = useState('branches');
 
   const [createdCredentials, setCreatedCredentials] = useState(null);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState('main');
 
   const [newOwnerForm, setNewOwnerForm] = useState({ fullName: '', centerName: '' });
-  const [newTeacherForm, setNewTeacherForm] = useState({ fullName: '', subject: '' });
+  const [newTeacherForm, setNewTeacherForm] = useState({ fullName: '', subject: '', salaryPercent: 40 });
   const [newStudentForm, setNewStudentForm] = useState({
     fullName: '', groupId: '', paymentDueDate: '', parentTelegramChatId: ''
   });
@@ -250,7 +256,7 @@ export default function App() {
   };
 
   // ==========================================
-  // CHAP TOMONDA FIXED SIDEBAR + RESPONSIVE MOBILE DRAWER
+  // CHAP TOMONDA FIXED SIDEBAR + RESPONSIVE DRAWER
   // ==========================================
   const renderSidebarLayout = (navItems, roleSubtitle, children) => (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col lg:flex-row">
@@ -482,9 +488,10 @@ export default function App() {
   }
 
   // ==========================================
-  // 3. O'QITUVCHI PANELI
+  // 3. O'QITUVCHI PANELI (DAVOMAT + O'Z OYLIK MAOSHI)
   // ==========================================
   if (currentUser.role === 'teacher') {
+    const myTeacherProfile = data.teachers.find(t => t.id === currentUser.id);
     const myGroups = data.groups.filter(
       g => g.teacher_id === currentUser.id || g.substitute_teacher_id === currentUser.id
     );
@@ -517,91 +524,117 @@ export default function App() {
       <>
         {activeTab === 'tools' ? (
           <StudyTools />
-        ) : myGroups.length === 0 ? (
-          <div className="bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl text-center text-sm text-slate-500">
-            Sizga hali guruh biriktirilmagan. O'quv markaz egasi guruh ochib sizni biriktirishi kerak.
-          </div>
         ) : (
-          myGroups.map(group => {
-            const groupStudents = data.students.filter(s => s.group_id === group.id);
-            const isSub = group.substitute_teacher_id === currentUser.id && group.teacher_id !== currentUser.id;
-
-            return (
-              <div
-                key={group.id}
-                className={`bg-white border rounded-2xl p-4 sm:p-6 shadow-sm ${
-                  group.isAttendanceMissing ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200'
-                }`}
-              >
-                <div className="flex flex-wrap justify-between items-center gap-3 mb-5 pb-4 border-b border-slate-200">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-lg sm:text-xl font-bold text-slate-900">{group.name}</h2>
-                      {isSub && (
-                        <span className="bg-purple-100 text-purple-700 text-xs px-2.5 py-1 rounded-full font-semibold">
-                          Vaqtincha almashtirish
-                        </span>
-                      )}
-                      {group.isAttendanceMissing && (
-                        <span className="bg-rose-100 text-rose-700 text-xs px-2.5 py-1 rounded-full flex items-center gap-1 font-semibold">
-                          <AlertTriangle size={14} /> Bugungi davomat olinmagan!
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-slate-500 text-xs sm:text-sm mt-1">
-                      Kunlar: {group.lesson_days} | Vaqt: {group.lesson_time} | O'quvchilar: {group.studentCount} ta
-                    </p>
+          <>
+            {/* O'qituvchining foizli oylik maoshi kartasi */}
+            {myTeacherProfile && (
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-3 gap-4 shadow-sm">
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl">
+                  <span className="text-xs text-slate-500">Sizning ulush foizingiz</span>
+                  <div className="text-xl font-extrabold text-blue-600 mt-1">{myTeacherProfile.salaryPercent}%</div>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl">
+                  <span className="text-xs text-slate-500">Shu oydagi guruh tushumi</span>
+                  <div className="text-xl font-extrabold text-slate-900 mt-1">
+                    {(myTeacherProfile.monthlyGroupRevenue || 0).toLocaleString()} so'm
                   </div>
                 </div>
-
-                <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-                  <table className="w-full min-w-[540px] text-left text-sm">
-                    <thead className="text-slate-500 border-b border-slate-200">
-                      <tr>
-                        <th className="pb-3">O'quvchi</th>
-                        <th className="pb-3">To'lov holati</th>
-                        <th className="pb-3">To'lov sanasi</th>
-                        <th className="pb-3 text-right">Davomat</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {groupStudents.map(st => (
-                        <tr key={st.id}>
-                          <td className="py-3.5 font-semibold text-slate-900">{st.full_name}</td>
-                          <td className="py-3.5">{renderPaymentBadge(st.paymentStatus)}</td>
-                          <td className="py-3.5 font-mono text-xs sm:text-sm text-slate-600">{st.payment_due_date || '-'}</td>
-                          <td className="py-3.5 text-right space-x-2 whitespace-nowrap">
-                            <button
-                              onClick={() => markAttendance(group.id, st.id, true)}
-                              className={`p-2 rounded-xl border transition ${
-                                st.todayAttendance === true
-                                  ? 'bg-emerald-600 text-white border-emerald-600'
-                                  : 'bg-slate-100 text-slate-500 border-slate-200 hover:border-emerald-500'
-                              }`}
-                              title="Keldi (Yashil tick)"
-                            >
-                              <CheckCircle2 size={18} />
-                            </button>
-                            <button
-                              onClick={() => markAttendance(group.id, st.id, false)}
-                              className={`p-2 rounded-xl border transition ${
-                                st.todayAttendance === false
-                                  ? 'bg-rose-600 text-white border-rose-600'
-                                  : 'bg-slate-100 text-slate-500 border-slate-200 hover:border-rose-500'
-                              }`}
-                              title="Kelmadi (Qizil X — Ota-onaga Telegram xabar ketadi)"
-                            >
-                              <XCircle size={18} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl">
+                  <span className="text-xs text-emerald-700 font-semibold">Shu oydagi hisoblangan maoshingiz</span>
+                  <div className="text-xl font-extrabold text-emerald-600 mt-1">
+                    {(myTeacherProfile.monthlySalary || 0).toLocaleString()} so'm
+                  </div>
                 </div>
               </div>
-            );
-          })
+            )}
+
+            {myGroups.length === 0 ? (
+              <div className="bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl text-center text-sm text-slate-500">
+                Sizga hali guruh biriktirilmagan. O'quv markaz egasi guruh ochib sizni biriktirishi kerak.
+              </div>
+            ) : (
+              myGroups.map(group => {
+                const groupStudents = data.students.filter(s => s.group_id === group.id);
+                const isSub = group.substitute_teacher_id === currentUser.id && group.teacher_id !== currentUser.id;
+
+                return (
+                  <div
+                    key={group.id}
+                    className={`bg-white border rounded-2xl p-4 sm:p-6 shadow-sm ${
+                      group.isAttendanceMissing ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200'
+                    }`}
+                  >
+                    <div className="flex flex-wrap justify-between items-center gap-3 mb-5 pb-4 border-b border-slate-200">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="text-lg sm:text-xl font-bold text-slate-900">{group.name}</h2>
+                          {isSub && (
+                            <span className="bg-purple-100 text-purple-700 text-xs px-2.5 py-1 rounded-full font-semibold">
+                              Vaqtincha almashtirish
+                            </span>
+                          )}
+                          {group.isAttendanceMissing && (
+                            <span className="bg-rose-100 text-rose-700 text-xs px-2.5 py-1 rounded-full flex items-center gap-1 font-semibold">
+                              <AlertTriangle size={14} /> Bugungi davomat olinmagan!
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-slate-500 text-xs sm:text-sm mt-1">
+                          Kunlar: {group.lesson_days} | Vaqt: {group.lesson_time} | O'quvchilar: {group.studentCount} ta
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                      <table className="w-full min-w-[540px] text-left text-sm">
+                        <thead className="text-slate-500 border-b border-slate-200">
+                          <tr>
+                            <th className="pb-3">O'quvchi</th>
+                            <th className="pb-3">To'lov holati</th>
+                            <th className="pb-3">To'lov sanasi</th>
+                            <th className="pb-3 text-right">Davomat</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {groupStudents.map(st => (
+                            <tr key={st.id}>
+                              <td className="py-3.5 font-semibold text-slate-900">{st.full_name}</td>
+                              <td className="py-3.5">{renderPaymentBadge(st.paymentStatus)}</td>
+                              <td className="py-3.5 font-mono text-xs sm:text-sm text-slate-600">{st.payment_due_date || '-'}</td>
+                              <td className="py-3.5 text-right space-x-2 whitespace-nowrap">
+                                <button
+                                  onClick={() => markAttendance(group.id, st.id, true)}
+                                  className={`p-2 rounded-xl border transition ${
+                                    st.todayAttendance === true
+                                      ? 'bg-emerald-600 text-white border-emerald-600'
+                                      : 'bg-slate-100 text-slate-500 border-slate-200 hover:border-emerald-500'
+                                  }`}
+                                  title="Keldi (Yashil tick)"
+                                >
+                                  <CheckCircle2 size={18} />
+                                </button>
+                                <button
+                                  onClick={() => markAttendance(group.id, st.id, false)}
+                                  className={`p-2 rounded-xl border transition ${
+                                    st.todayAttendance === false
+                                      ? 'bg-rose-600 text-white border-rose-600'
+                                      : 'bg-slate-100 text-slate-500 border-slate-200 hover:border-rose-500'
+                                  }`}
+                                  title="Kelmadi (Qizil X — Ota-onaga Telegram xabar ketadi)"
+                                >
+                                  <XCircle size={18} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </>
         )}
       </>
     ));
@@ -627,7 +660,7 @@ export default function App() {
     try {
       const res = await axios.post(`${API}/owner/teachers`, newTeacherForm, authHeaders);
       setCreatedCredentials({ ...res.data, roleLabel: "O'qituvchi" });
-      setNewTeacherForm({ fullName: '', subject: '' });
+      setNewTeacherForm({ fullName: '', subject: '', salaryPercent: 40 });
       fetchData();
     } catch (err) {
       alert(err.response?.data?.error || "O'qituvchi yaratishda xatolik yuz berdi!");
@@ -751,7 +784,9 @@ export default function App() {
   ];
 
   const roleTitle = currentUser.role === 'admin' ? 'Super Admin (Gmail)' : "O'quv Markaz Egasi";
-  const fin = data.financeSummary || { monthlyIncome: 0, totalIncome: 0, overdueDebt: 0, upcomingExpected: 0 };
+  const fin = data.financeSummary || {
+    monthlyIncome: 0, totalIncome: 0, overdueDebt: 0, upcomingExpected: 0, totalTeachersMonthlySalary: 0
+  };
 
   return renderSidebarLayout(adminNav, roleTitle, (
     <>
@@ -810,10 +845,9 @@ export default function App() {
         </div>
       )}
 
-      {/* MARKAZ ICHKI MOLIYASI (KASSA VA QARZDORLIK) */}
+      {/* MARKAZ ICHKI MOLIYASI (KASSA, QARZDORLIK VA O'QITUVCHILAR MAOSHI) */}
       {ownerTab === 'finance' && (
         <div className="space-y-6">
-          {/* 4 ta asosiy moliyaviy ko'rsatkich */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
               <div className="flex items-center justify-between text-emerald-600 mb-2">
@@ -827,11 +861,11 @@ export default function App() {
 
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
               <div className="flex items-center justify-between text-blue-600 mb-2">
-                <span className="text-xs font-bold uppercase">Jami kassa tushumi</span>
-                <Wallet size={18} />
+                <span className="text-xs font-bold uppercase">O'qituvchilar maoshi (Oy)</span>
+                <Users size={18} />
               </div>
-              <div className="text-2xl font-extrabold text-slate-900">
-                {fin.totalIncome.toLocaleString()} <span className="text-xs font-medium text-slate-500">so'm</span>
+              <div className="text-2xl font-extrabold text-blue-600">
+                {(fin.totalTeachersMonthlySalary || 0).toLocaleString()} <span className="text-xs font-medium text-slate-500">so'm</span>
               </div>
             </div>
 
@@ -856,7 +890,72 @@ export default function App() {
             </div>
           </div>
 
-          {/* Kassaga qo'lda kirim qo'shish formasi */}
+          {/* O'qituvchilar oylik maoshi jadvali (Foiz asosida) */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm">
+            <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                O'qituvchilar oylik maoshi (Guruh tushumidan foiz asosida)
+              </h2>
+              <span className="bg-blue-50 text-blue-700 text-xs font-bold px-3 py-1.5 rounded-xl">
+                Jami oylik fondi: {(fin.totalTeachersMonthlySalary || 0).toLocaleString()} so'm
+              </span>
+            </div>
+
+            {data.teachers.length === 0 ? (
+              <p className="text-sm text-slate-500">Hozircha o'qituvchilar yo'q.</p>
+            ) : (
+              <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                <table className="w-full min-w-[600px] text-left text-sm">
+                  <thead className="text-slate-500 border-b border-slate-200">
+                    <tr>
+                      <th className="pb-3">O'qituvchi</th>
+                      <th className="pb-3">Shu oydagi guruh tushumi</th>
+                      <th className="pb-3">Ulush foizi (%)</th>
+                      <th className="pb-3 text-right">Hisoblangan oylik maosh</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {data.teachers.map(t => (
+                      <tr key={t.id}>
+                        <td className="py-3.5 font-semibold text-slate-900">
+                          <div>{t.full_name}</div>
+                          <div className="text-xs text-slate-500">{t.subject}</div>
+                        </td>
+                        <td className="py-3.5 text-slate-700">
+                          {(t.monthlyGroupRevenue || 0).toLocaleString()} so'm
+                        </td>
+                        <td className="py-3.5">
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              className="w-20 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold"
+                              defaultValue={t.salaryPercent ?? 40}
+                              onBlur={async (e) => {
+                                await axios.put(
+                                  `${API}/owner/teachers/${t.id}/salary-percent`,
+                                  { salaryPercent: e.target.value },
+                                  authHeaders
+                                );
+                                fetchData();
+                              }}
+                            />
+                            <span className="text-xs font-bold text-slate-500">%</span>
+                          </div>
+                        </td>
+                        <td className="py-3.5 text-right font-extrabold text-emerald-600">
+                          {(t.monthlySalary || 0).toLocaleString()} so'm
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Kassaga qo'lda kirim qo'shish */}
           <form onSubmit={handleAddManualPayment} className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 shadow-sm">
             <select
               required
@@ -1030,7 +1129,7 @@ export default function App() {
       {ownerTab === 'accounts' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-5 shadow-sm">
-            <h2 className="text-base sm:text-lg font-bold text-slate-900">1. O'qituvchiga Login va Parol berish</h2>
+            <h2 className="text-base sm:text-lg font-bold text-slate-900">1. O'qituvchiga Login, Parol va Ulush (%) berish</h2>
             <form onSubmit={handleCreateTeacher} className="space-y-3">
               <input
                 type="text"
@@ -1040,14 +1139,26 @@ export default function App() {
                 value={newTeacherForm.fullName}
                 onChange={e => setNewTeacherForm({ ...newTeacherForm, fullName: e.target.value })}
               />
-              <input
-                type="text"
-                placeholder="Fani (masalan: Matematika, Ingliz tili)"
-                required
-                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-                value={newTeacherForm.subject}
-                onChange={e => setNewTeacherForm({ ...newTeacherForm, subject: e.target.value })}
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <input
+                  type="text"
+                  placeholder="Fani (masalan: Matematika)"
+                  required
+                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+                  value={newTeacherForm.subject}
+                  onChange={e => setNewTeacherForm({ ...newTeacherForm, subject: e.target.value })}
+                />
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  placeholder="Ulush foizi (%)"
+                  required
+                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+                  value={newTeacherForm.salaryPercent}
+                  onChange={e => setNewTeacherForm({ ...newTeacherForm, salaryPercent: e.target.value })}
+                />
+              </div>
               <button className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-sm font-semibold">
                 + O'qituvchi Login-Parolini yaratish
               </button>
@@ -1057,7 +1168,9 @@ export default function App() {
               {data.teachers.map(t => (
                 <div key={t.id} className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex justify-between items-start gap-2">
                   <div className="min-w-0">
-                    <div className="font-bold text-slate-900 truncate">{t.full_name}</div>
+                    <div className="font-bold text-slate-900 truncate">
+                      {t.full_name} <span className="text-xs text-emerald-600 font-semibold">({t.salaryPercent}%)</span>
+                    </div>
                     <div className="text-xs text-slate-500">
                       {t.subject} | Login: <b className="text-blue-600">{t.username}</b>
                     </div>
