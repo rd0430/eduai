@@ -5,7 +5,7 @@ import {
   ArrowRightLeft, UserCheck, Clock, AlertTriangle, LogOut,
   CreditCard, BellRing, ChevronRight, Moon, Sun, BookOpen,
   Wrench, KeyRound, Copy, Check, ShieldCheck, UserPlus,
-  LayoutGrid, Menu, X
+  LayoutGrid, Menu, X, Wallet, TrendingUp, AlertCircle
 } from 'lucide-react';
 import StudyTools from './StudyTools.jsx';
 
@@ -18,7 +18,6 @@ export default function App() {
   });
   const [token, setToken] = useState(() => localStorage.getItem('eduai_token') || '');
 
-  // Sukut bo'yicha toza OQ (Kun rejimi)
   const [darkMode, setDarkMode] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -26,12 +25,19 @@ export default function App() {
   const googleBtnRef = useRef(null);
 
   const [data, setData] = useState({
-    branches: [], groups: [], centerOwners: [], teachers: [], students: [], attendance: []
+    branches: [],
+    groups: [],
+    centerOwners: [],
+    teachers: [],
+    students: [],
+    attendance: [],
+    payments: [],
+    financeSummary: { monthlyIncome: 0, totalIncome: 0, overdueDebt: 0, upcomingExpected: 0 }
   });
 
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState(null);
-  const [ownerTab, setOwnerTab] = useState('branches'); // 'branches' | 'accounts' | 'owners'
+  const [ownerTab, setOwnerTab] = useState('branches'); // 'branches' | 'accounts' | 'finance' | 'owners'
 
   const [createdCredentials, setCreatedCredentials] = useState(null);
   const [copied, setCopied] = useState(false);
@@ -41,6 +47,9 @@ export default function App() {
   const [newTeacherForm, setNewTeacherForm] = useState({ fullName: '', subject: '' });
   const [newStudentForm, setNewStudentForm] = useState({
     fullName: '', groupId: '', paymentDueDate: '', parentTelegramChatId: ''
+  });
+  const [newPaymentForm, setNewPaymentForm] = useState({
+    studentId: '', amount: '', paymentMethod: 'Naqd', note: ''
   });
 
   const [newBranch, setNewBranch] = useState({ name: '', address: '' });
@@ -151,7 +160,7 @@ export default function App() {
   };
 
   // ==========================================
-  // 1. LOGIN OYNASI (MOBILGA MOS VA TOZA OQ)
+  // 1. LOGIN OYNASI
   // ==========================================
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -245,7 +254,6 @@ export default function App() {
   // ==========================================
   const renderSidebarLayout = (navItems, roleSubtitle, children) => (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col lg:flex-row">
-      {/* Mobil qora fon */}
       {mobileMenuOpen && (
         <div
           onClick={() => setMobileMenuOpen(false)}
@@ -253,7 +261,6 @@ export default function App() {
         />
       )}
 
-      {/* CHAP TOMONDA FIXED SIDEBAR */}
       <aside
         className={`fixed top-0 left-0 z-40 h-screen w-64 bg-white border-r border-slate-200 flex flex-col justify-between transition-transform duration-200 shadow-lg lg:shadow-none ${
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
@@ -328,9 +335,7 @@ export default function App() {
         </div>
       </aside>
 
-      {/* O'NG TOMON ASOSIY KONTENT */}
       <div className="flex-1 lg:ml-64 min-w-0 flex flex-col">
-        {/* Mobil tepa bar */}
         <header className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-xs">
           <button
             onClick={() => setMobileMenuOpen(true)}
@@ -485,8 +490,12 @@ export default function App() {
     );
 
     const markAttendance = async (groupId, studentId, status) => {
-      await axios.post(`${API}/attendance`, { groupId, studentId, status }, authHeaders);
-      fetchData();
+      try {
+        await axios.post(`${API}/attendance`, { groupId, studentId, status }, authHeaders);
+        fetchData();
+      } catch (err) {
+        alert(err.response?.data?.error || 'Davomatni saqlashda xatolik yuz berdi!');
+      }
     };
 
     const teacherNav = [
@@ -637,6 +646,17 @@ export default function App() {
     }
   };
 
+  const handleAddManualPayment = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API}/payments`, newPaymentForm, authHeaders);
+      setNewPaymentForm({ studentId: '', amount: '', paymentMethod: 'Naqd', note: '' });
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.error || "To'lov qo'shishda xatolik yuz berdi!");
+    }
+  };
+
   const handleResetPassword = async (userId) => {
     try {
       const res = await axios.post(`${API}/users/${userId}/reset-password`, {}, authHeaders);
@@ -648,31 +668,47 @@ export default function App() {
 
   const handleAddBranch = async (e) => {
     e.preventDefault();
-    await axios.post(`${API}/branches`, newBranch, authHeaders);
-    setNewBranch({ name: '', address: '' });
-    fetchData();
+    try {
+      await axios.post(`${API}/branches`, newBranch, authHeaders);
+      setNewBranch({ name: '', address: '' });
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.error || "Filial qo'shishda xatolik yuz berdi!");
+    }
   };
 
   const handleAddGroup = async (e) => {
     e.preventDefault();
-    await axios.post(`${API}/groups`, { ...newGroup, branchId: selectedBranch.id }, authHeaders);
-    setNewGroup({ name: '', price: '', lessonDays: 'Dush, Chor, Jum', lessonTime: '14:00 - 16:00', teacherId: '' });
-    fetchData();
+    if (!newGroup.teacherId) {
+      alert("Avval 'O'qituvchi & O'quvchilar' bo'limidan o'qituvchi yarating va tanlang!");
+      return;
+    }
+    try {
+      await axios.post(`${API}/groups`, { ...newGroup, branchId: selectedBranch.id }, authHeaders);
+      setNewGroup({ name: '', price: '', lessonDays: 'Dush, Chor, Jum', lessonTime: '14:00 - 16:00', teacherId: '' });
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Guruh ochishda xatolik yuz berdi!');
+    }
   };
 
   const handleEnrollStudent = async (e) => {
     e.preventDefault();
-    await axios.put(
-      `${API}/students/${enrollForm.studentId}/enroll`,
-      {
-        groupId: selectedGroup.id,
-        paymentDueDate: enrollForm.paymentDueDate,
-        parentTelegramChatId: enrollForm.parentTelegramChatId
-      },
-      authHeaders
-    );
-    setEnrollForm({ studentId: '', paymentDueDate: '', parentTelegramChatId: '' });
-    fetchData();
+    try {
+      await axios.put(
+        `${API}/students/${enrollForm.studentId}/enroll`,
+        {
+          groupId: selectedGroup.id,
+          paymentDueDate: enrollForm.paymentDueDate,
+          parentTelegramChatId: enrollForm.parentTelegramChatId
+        },
+        authHeaders
+      );
+      setEnrollForm({ studentId: '', paymentDueDate: '', parentTelegramChatId: '' });
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.error || "O'quvchini guruhga qo'shishda xatolik!");
+    }
   };
 
   const adminNav = [
@@ -697,6 +733,12 @@ export default function App() {
       onClick: () => { setOwnerTab('accounts'); setSelectedBranch(null); setSelectedGroup(null); }
     },
     {
+      label: 'Moliya & Kassa',
+      icon: Wallet,
+      active: ownerTab === 'finance',
+      onClick: () => { setOwnerTab('finance'); setSelectedBranch(null); setSelectedGroup(null); }
+    },
+    {
       label: "Qizil to'lovlar Bot",
       icon: BellRing,
       variant: 'warning',
@@ -709,6 +751,7 @@ export default function App() {
   ];
 
   const roleTitle = currentUser.role === 'admin' ? 'Super Admin (Gmail)' : "O'quv Markaz Egasi";
+  const fin = data.financeSummary || { monthlyIncome: 0, totalIncome: 0, overdueDebt: 0, upcomingExpected: 0 };
 
   return renderSidebarLayout(adminNav, roleTitle, (
     <>
@@ -763,6 +806,157 @@ export default function App() {
             >
               Yopish
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* MARKAZ ICHKI MOLIYASI (KASSA VA QARZDORLIK) */}
+      {ownerTab === 'finance' && (
+        <div className="space-y-6">
+          {/* 4 ta asosiy moliyaviy ko'rsatkich */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+              <div className="flex items-center justify-between text-emerald-600 mb-2">
+                <span className="text-xs font-bold uppercase">Shu oydagi tushum</span>
+                <TrendingUp size={18} />
+              </div>
+              <div className="text-2xl font-extrabold text-slate-900">
+                {fin.monthlyIncome.toLocaleString()} <span className="text-xs font-medium text-slate-500">so'm</span>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+              <div className="flex items-center justify-between text-blue-600 mb-2">
+                <span className="text-xs font-bold uppercase">Jami kassa tushumi</span>
+                <Wallet size={18} />
+              </div>
+              <div className="text-2xl font-extrabold text-slate-900">
+                {fin.totalIncome.toLocaleString()} <span className="text-xs font-medium text-slate-500">so'm</span>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+              <div className="flex items-center justify-between text-rose-600 mb-2">
+                <span className="text-xs font-bold uppercase">Qizil qarzdorlik</span>
+                <AlertCircle size={18} />
+              </div>
+              <div className="text-2xl font-extrabold text-rose-600">
+                {fin.overdueDebt.toLocaleString()} <span className="text-xs font-medium text-slate-500">so'm</span>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+              <div className="flex items-center justify-between text-amber-600 mb-2">
+                <span className="text-xs font-bold uppercase">Kutilayotgan tushum</span>
+                <Clock size={18} />
+              </div>
+              <div className="text-2xl font-extrabold text-slate-900">
+                {fin.upcomingExpected.toLocaleString()} <span className="text-xs font-medium text-slate-500">so'm</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Kassaga qo'lda kirim qo'shish formasi */}
+          <form onSubmit={handleAddManualPayment} className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 shadow-sm">
+            <select
+              required
+              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
+              value={newPaymentForm.studentId}
+              onChange={e => {
+                const st = data.students.find(s => s.id === e.target.value);
+                setNewPaymentForm({
+                  ...newPaymentForm,
+                  studentId: e.target.value,
+                  amount: st?.coursePrice || ''
+                });
+              }}
+            >
+              <option value="">O'quvchini tanlang...</option>
+              {data.students.map(s => (
+                <option key={s.id} value={s.id}>{s.full_name} ({s.groupName})</option>
+              ))}
+            </select>
+            <input
+              type="number"
+              placeholder="Summa (so'm)"
+              required
+              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
+              value={newPaymentForm.amount}
+              onChange={e => setNewPaymentForm({ ...newPaymentForm, amount: e.target.value })}
+            />
+            <select
+              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
+              value={newPaymentForm.paymentMethod}
+              onChange={e => setNewPaymentForm({ ...newPaymentForm, paymentMethod: e.target.value })}
+            >
+              <option value="Naqd">Naqd pul</option>
+              <option value="Karta / P2P">Karta / P2P</option>
+              <option value="Click / Payme">Click / Payme</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Izoh (ixtiyoriy)"
+              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
+              value={newPaymentForm.note}
+              onChange={e => setNewPaymentForm({ ...newPaymentForm, note: e.target.value })}
+            />
+            <button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 py-2.5">
+              <Plus size={16} /> Kirim qo'shish
+            </button>
+          </form>
+
+          {/* To'lovlar tarixi jadvali */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 mb-4">Kassa kirimlar tarixi</h2>
+            {data.payments.length === 0 ? (
+              <p className="text-sm text-slate-500">Hozircha to'lovlar qayd etilmagan.</p>
+            ) : (
+              <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                <table className="w-full min-w-[600px] text-left text-sm">
+                  <thead className="text-slate-500 border-b border-slate-200">
+                    <tr>
+                      <th className="pb-3">Sana</th>
+                      <th className="pb-3">O'quvchi</th>
+                      <th className="pb-3">Guruh</th>
+                      <th className="pb-3">To'lov turi</th>
+                      <th className="pb-3">Summa</th>
+                      <th className="pb-3 text-right">O'chirish</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {data.payments.map(p => (
+                      <tr key={p.id}>
+                        <td className="py-3 font-mono text-xs text-slate-500">
+                          {new Date(p.paid_at).toLocaleDateString('uz-UZ')}
+                        </td>
+                        <td className="py-3 font-semibold text-slate-900">{p.studentName}</td>
+                        <td className="py-3 text-slate-600">{p.groupName}</td>
+                        <td className="py-3">
+                          <span className="bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full font-semibold">
+                            {p.payment_method}
+                          </span>
+                        </td>
+                        <td className="py-3 font-bold text-emerald-600">
+                          +{p.amount.toLocaleString()} so'm
+                        </td>
+                        <td className="py-3 text-right">
+                          <button
+                            onClick={async () => {
+                              if (!confirm("Ushbu to'lov yozuvini o'chirasizmi?")) return;
+                              await axios.delete(`${API}/payments/${p.id}`, authHeaders);
+                              fetchData();
+                            }}
+                            className="text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}

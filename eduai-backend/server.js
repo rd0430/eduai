@@ -129,14 +129,26 @@ function getPaymentStatus(isPaid, dueDateStr) {
   return { color: 'green', label: `${diffDays} kun bor`, isOverdue: false };
 }
 
-async function checkAndNotifyOverduePayments() {
+// Multi-tenancy: Foydalanuvchi qaysi markazga tegishli ekanligini aniqlash
+function getTenantOwnerId(user) {
+  if (!user || user.role === 'admin') return null; // Super Admin barchasini ko'radi
+  if (user.role === 'center_owner') return user.id;
+  return user.owner_id || null;
+}
+
+async function checkAndNotifyOverduePayments(filterOwnerId = null) {
   if (!supabase) return 0;
-  const { data: students } = await supabase
+  let stQuery = supabase
     .from('users')
-    .select('id, full_name, payment_due_date, is_paid, parent_telegram_chat_id, group_id')
+    .select('id, full_name, payment_due_date, is_paid, parent_telegram_chat_id, group_id, owner_id')
     .eq('role', 'student')
     .eq('is_paid', false);
 
+  if (filterOwnerId) {
+    stQuery = stQuery.eq('owner_id', filterOwnerId);
+  }
+
+  const { data: students } = await stQuery;
   const { data: groups } = await supabase.from('groups').select('id, name, price');
   const groupMap = Object.fromEntries((groups || []).map(g => [g.id, g]));
 
@@ -255,7 +267,7 @@ app.post('/api/auth/login', loginLimiter, checkConfig, async (req, res) => {
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, full_name, subject, username, role, group_id, xp_points, streak_days, last_active_date, is_active, password_hash, avatar_url')
+      .select('id, full_name, subject, username, role, group_id, owner_id, xp_points, streak_days, last_active_date, is_active, password_hash, avatar_url')
       .eq('username', String(username).trim().toLowerCase())
       .single();
 
@@ -275,7 +287,11 @@ app.post('/api/auth/login', loginLimiter, checkConfig, async (req, res) => {
       .update({ last_active_date: today, streak_days: streak, is_online: true, last_seen: new Date().toISOString() })
       .eq('id', user.id);
 
-    const token = jwt.sign({ id: user.id, role: user.role, group_id: user.group_id }, getJwtSecret(), { expiresIn: '7d' });
+    const token = jwt.sign(
+      { id: user.id, role: user.role, group_id: user.group_id, owner_id: user.owner_id },
+      getJwtSecret(),
+      { expiresIn: '7d' }
+    );
 
     res.json({
       token,
@@ -286,6 +302,7 @@ app.post('/api/auth/login', loginLimiter, checkConfig, async (req, res) => {
         username: user.username,
         role: user.role,
         groupId: user.group_id,
+        ownerId: user.owner_id,
         xp: user.xp_points,
         streak,
         avatarUrl: user.avatar_url
@@ -304,7 +321,7 @@ app.post('/api/auth/logout', authenticate, async (req, res) => {
 });
 
 // ==========================================
-// 5. ADMIN (GMAIL) -> CENTER OWNER YARATISH VA BOSHQARISH
+// 5. ADMIN (GMAIL) -> CENTER OWNER YARATISH
 // ==========================================
 app.post('/api/admin/center-owners', authenticate, requireSuperAdmin, checkConfig, async (req, res) => {
   try {
@@ -343,13 +360,14 @@ app.post('/api/admin/center-owners', authenticate, requireSuperAdmin, checkConfi
 });
 
 // ==========================================
-// 6. CENTER OWNER -> O'QITUVCHI VA O'QUVCHI LOGIN-PAROL YARATISH
+// 6. CENTER OWNER -> O'QITUVCHI VA O'QUVCHI LOGIN-PAROL YARATISH (IZOLYATSIYA BILAN)
 // ==========================================
 app.post('/api/owner/teachers', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   try {
-    const { fullName, subject } = req.body;
+    const { fullName, subject, ownerId } = req.body;
     if (!fullName?.trim()) return res.status(400).json({ error: 'O‘qituvchi ism-familiyasi shart' });
 
+    const tenantOwnerId = req.user.role === 'center_owner' ? req.user.id : (ownerId || null);
     const cleanFirst = fullName.trim().split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'ustoz';
     const username = `ustoz_${cleanFirst}_${Math.floor(100 + Math.random() * 900)}`;
     const plainPassword = String(Math.floor(100000 + Math.random() * 900000));
@@ -359,6 +377,7 @@ app.post('/api/owner/teachers', authenticate, requireAdminOrOwner, checkConfig, 
       .from('users')
       .insert({
         role: 'teacher',
+        owner_id: tenantOwnerId,
         full_name: fullName.trim().slice(0, 120),
         subject: subject?.trim().slice(0, 80) || 'Umumiy fan',
         username,
@@ -383,9 +402,10 @@ app.post('/api/owner/teachers', authenticate, requireAdminOrOwner, checkConfig, 
 
 app.post('/api/owner/students', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   try {
-    const { fullName, groupId, paymentDueDate, parentTelegramChatId } = req.body;
+    const { fullName, groupId, paymentDueDate, parentTelegramChatId, ownerId } = req.body;
     if (!fullName?.trim()) return res.status(400).json({ error: 'O‘quvchi ism-familiyasi shart' });
 
+    const tenantOwnerId = req.user.role === 'center_owner' ? req.user.id : (ownerId || null);
     const cleanFirst = fullName.trim().split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'student';
     const username = `${cleanFirst}_${Math.floor(100 + Math.random() * 900)}`;
     const plainPassword = String(Math.floor(100000 + Math.random() * 900000));
@@ -396,6 +416,7 @@ app.post('/api/owner/students', authenticate, requireAdminOrOwner, checkConfig, 
       .from('users')
       .insert({
         role: 'student',
+        owner_id: tenantOwnerId,
         full_name: fullName.trim().slice(0, 120),
         username,
         password_hash: passwordHash,
@@ -420,18 +441,20 @@ app.post('/api/owner/students', authenticate, requireAdminOrOwner, checkConfig, 
   }
 });
 
-// Istalgan foydalanuvchi (owner, teacher, student) parolini yangilash
 app.post('/api/users/:id/reset-password', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   try {
+    const tenantOwnerId = getTenantOwnerId(req.user);
     const plainPassword = String(Math.floor(100000 + Math.random() * 900000));
     const passwordHash = await bcrypt.hash(plainPassword, 10);
-    const { data: user, error } = await supabase
+
+    let query = supabase
       .from('users')
       .update({ password_hash: passwordHash })
-      .eq('id', req.params.id)
-      .select('full_name, username, role')
-      .single();
+      .eq('id', req.params.id);
 
+    if (tenantOwnerId) query = query.eq('owner_id', tenantOwnerId);
+
+    const { data: user, error } = await query.select('full_name, username, role').single();
     if (error || !user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
     res.json({ fullName: user.full_name, username: user.username, role: user.role, plainPassword });
   } catch (err) {
@@ -440,17 +463,30 @@ app.post('/api/users/:id/reset-password', authenticate, requireAdminOrOwner, che
 });
 
 // ==========================================
-// 7. MAHALLA -> UY -> XONA MA'LUMOTLARI
+// 7. IZOLYATSIYA QILINGAN MARKAZ MA'LUMOTLARI VA MOLIYA
 // ==========================================
 app.get('/api/center/data', authenticate, checkConfig, async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
+    const tenantOwnerId = getTenantOwnerId(req.user);
 
-    const [{ data: branches }, { data: groups }, { data: users }, { data: attendance }] = await Promise.all([
-      supabase.from('branches').select('*').order('created_at', { ascending: true }),
-      supabase.from('groups').select('*').order('created_at', { ascending: false }),
-      supabase.from('users').select('id, role, full_name, subject, username, is_active, group_id, payment_due_date, is_paid, parent_telegram_chat_id, xp_points, streak_days'),
-      supabase.from('attendance').select('*').order('attendance_date', { ascending: false })
+    let branchQ = supabase.from('branches').select('*').order('created_at', { ascending: true });
+    let groupQ = supabase.from('groups').select('*').order('created_at', { ascending: false });
+    let userQ = supabase.from('users').select('id, role, full_name, subject, username, is_active, group_id, owner_id, payment_due_date, is_paid, parent_telegram_chat_id, xp_points, streak_days');
+    let attQ = supabase.from('attendance').select('*').order('attendance_date', { ascending: false });
+    let payQ = supabase.from('payments').select('*').order('paid_at', { ascending: false }).limit(200);
+
+    // Multi-Tenancy filtrlash: har bir markaz faqat o'z ma'lumotlarini ko'radi
+    if (tenantOwnerId) {
+      branchQ = branchQ.eq('owner_id', tenantOwnerId);
+      groupQ = groupQ.eq('owner_id', tenantOwnerId);
+      userQ = userQ.eq('owner_id', tenantOwnerId);
+      attQ = attQ.eq('owner_id', tenantOwnerId);
+      payQ = payQ.eq('owner_id', tenantOwnerId);
+    }
+
+    const [{ data: branches }, { data: groups }, { data: users }, { data: attendance }, { data: payments }] = await Promise.all([
+      branchQ, groupQ, userQ, attQ, payQ
     ]);
 
     const centerOwners = (users || []).filter(u => u.role === 'center_owner');
@@ -475,6 +511,7 @@ app.get('/api/center/data', authenticate, checkConfig, async (req, res) => {
     });
 
     const groupMap = Object.fromEntries(enrichedGroups.map(g => [g.id, g]));
+    const studentMap = Object.fromEntries(students.map(s => [s.id, s]));
 
     const enrichedStudents = students.map(s => {
       const grp = groupMap[s.group_id];
@@ -493,13 +530,43 @@ app.get('/api/center/data', authenticate, checkConfig, async (req, res) => {
       assignedGroups: enrichedGroups.filter(g => g.teacher_id === t.id || g.substitute_teacher_id === t.id)
     }));
 
+    const enrichedPayments = (payments || []).map(p => ({
+      ...p,
+      amount: Number(p.amount || 0),
+      studentName: studentMap[p.student_id]?.full_name || "O'chirilgan o'quvchi",
+      groupName: groupMap[p.group_id]?.name || 'Guruh'
+    }));
+
+    // Moliya (Kassa) statistikasi
+    const currentMonthPrefix = today.slice(0, 7); // YYYY-MM
+    const monthlyIncome = enrichedPayments
+      .filter(p => String(p.paid_at || '').startsWith(currentMonthPrefix))
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const totalIncome = enrichedPayments.reduce((sum, p) => sum + p.amount, 0);
+
+    const overdueDebt = enrichedStudents
+      .filter(s => s.paymentStatus?.color === 'red')
+      .reduce((sum, s) => sum + s.coursePrice, 0);
+
+    const upcomingExpected = enrichedStudents
+      .filter(s => !s.is_paid && s.paymentStatus?.color !== 'red')
+      .reduce((sum, s) => sum + s.coursePrice, 0);
+
     res.json({
       branches: branches || [],
       groups: enrichedGroups,
       centerOwners,
       teachers: enrichedTeachers,
       students: enrichedStudents,
-      attendance: attendance || []
+      attendance: attendance || [],
+      payments: enrichedPayments,
+      financeSummary: {
+        monthlyIncome,
+        totalIncome,
+        overdueDebt,
+        upcomingExpected
+      }
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -511,10 +578,11 @@ app.post('/api/branches', authenticate, requireAdminOrOwner, checkConfig, async 
   const { name, address } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Filial nomi shart' });
 
+  const tenantOwnerId = req.user.role === 'center_owner' ? req.user.id : null;
   const { data, error } = await supabase
     .from('branches')
     .insert({
-      owner_id: req.user.id !== 'super_admin' ? req.user.id : null,
+      owner_id: tenantOwnerId,
       name: name.trim(),
       address: address?.trim() || ''
     })
@@ -525,7 +593,10 @@ app.post('/api/branches', authenticate, requireAdminOrOwner, checkConfig, async 
 });
 
 app.delete('/api/branches/:id', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
-  const { error } = await supabase.from('branches').delete().eq('id', req.params.id);
+  const tenantOwnerId = getTenantOwnerId(req.user);
+  let query = supabase.from('branches').delete().eq('id', req.params.id);
+  if (tenantOwnerId) query = query.eq('owner_id', tenantOwnerId);
+  const { error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
@@ -537,9 +608,11 @@ app.post('/api/groups', authenticate, requireAdminOrOwner, checkConfig, async (r
     return res.status(400).json({ error: 'Filial, guruh nomi va o‘qituvchi tanlanishi shart' });
   }
 
+  const tenantOwnerId = req.user.role === 'center_owner' ? req.user.id : null;
   const { data, error } = await supabase
     .from('groups')
     .insert({
+      owner_id: tenantOwnerId,
       branch_id: branchId,
       name: name.trim(),
       price: Number(price) || 0,
@@ -554,72 +627,150 @@ app.post('/api/groups', authenticate, requireAdminOrOwner, checkConfig, async (r
 });
 
 app.delete('/api/groups/:id', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
-  const { error } = await supabase.from('groups').delete().eq('id', req.params.id);
+  const tenantOwnerId = getTenantOwnerId(req.user);
+  let query = supabase.from('groups').delete().eq('id', req.params.id);
+  if (tenantOwnerId) query = query.eq('owner_id', tenantOwnerId);
+  const { error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
 
 app.put('/api/groups/:id/substitute', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   const { substituteTeacherId } = req.body;
-  const { error } = await supabase
+  const tenantOwnerId = getTenantOwnerId(req.user);
+  let query = supabase
     .from('groups')
     .update({ substitute_teacher_id: substituteTeacherId || null })
     .eq('id', req.params.id);
+  if (tenantOwnerId) query = query.eq('owner_id', tenantOwnerId);
+  const { error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
 
-// O'quvchini guruhga yozish / transfer / to'lov / o'chirish
+// O'quvchini guruhga yozish / transfer / to'lov (Kassaga avtomatik kirim bilan) / o'chirish
 app.put('/api/students/:id/enroll', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   const { groupId, paymentDueDate, parentTelegramChatId } = req.body;
+  const tenantOwnerId = getTenantOwnerId(req.user);
   const updatePayload = { group_id: groupId || null, is_paid: false };
   if (paymentDueDate) updatePayload.payment_due_date = paymentDueDate;
   if (parentTelegramChatId !== undefined) {
     updatePayload.parent_telegram_chat_id = String(parentTelegramChatId).trim() || null;
   }
 
-  const { error } = await supabase.from('users').update(updatePayload).eq('id', req.params.id).eq('role', 'student');
+  let query = supabase.from('users').update(updatePayload).eq('id', req.params.id).eq('role', 'student');
+  if (tenantOwnerId) query = query.eq('owner_id', tenantOwnerId);
+  const { error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
 
 app.put('/api/students/:id/transfer', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   const { newGroupId } = req.body;
-  const { error } = await supabase
+  const tenantOwnerId = getTenantOwnerId(req.user);
+  let query = supabase
     .from('users')
     .update({ group_id: newGroupId || null })
     .eq('id', req.params.id)
     .eq('role', 'student');
+  if (tenantOwnerId) query = query.eq('owner_id', tenantOwnerId);
+  const { error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
 
 app.put('/api/students/:id/pay', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
-  const { nextPaymentDate } = req.body;
-  const nextDate = nextPaymentDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+  try {
+    const { nextPaymentDate, paymentMethod = 'Naqd', customAmount } = req.body;
+    const tenantOwnerId = getTenantOwnerId(req.user);
+    const nextDate = nextPaymentDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
 
-  const { error } = await supabase
-    .from('users')
-    .update({ is_paid: true, payment_due_date: nextDate })
-    .eq('id', req.params.id)
-    .eq('role', 'student');
+    let stQuery = supabase.from('users').select('id, group_id, owner_id').eq('id', req.params.id).eq('role', 'student');
+    if (tenantOwnerId) stQuery = stQuery.eq('owner_id', tenantOwnerId);
+    const { data: student } = await stQuery.single();
+    if (!student) return res.status(404).json({ error: "O'quvchi topilmadi" });
+
+    let amount = Number(customAmount) || 0;
+    if (!amount && student.group_id) {
+      const { data: grp } = await supabase.from('groups').select('price').eq('id', student.group_id).single();
+      amount = Number(grp?.price || 0);
+    }
+
+    const { error } = await supabase
+      .from('users')
+      .update({ is_paid: true, payment_due_date: nextDate })
+      .eq('id', req.params.id);
+    if (error) throw error;
+
+    // Kassaga (payments jadvaliga) kirim yozish
+    if (amount > 0) {
+      await supabase.from('payments').insert({
+        owner_id: student.owner_id || tenantOwnerId,
+        student_id: student.id,
+        group_id: student.group_id,
+        amount,
+        payment_method: paymentMethod,
+        note: "Oylik kurs to'lovi"
+      });
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Kassaga qo'lda kirim qo'shish va kirimni o'chirish
+app.post('/api/payments', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
+  try {
+    const { studentId, amount, paymentMethod, note } = req.body;
+    const tenantOwnerId = getTenantOwnerId(req.user);
+    if (!studentId || !Number(amount)) return res.status(400).json({ error: "O'quvchi va summa kiritilishi shart" });
+
+    const { data: student } = await supabase.from('users').select('id, group_id, owner_id').eq('id', studentId).single();
+    const { error } = await supabase.from('payments').insert({
+      owner_id: student?.owner_id || tenantOwnerId,
+      student_id: studentId,
+      group_id: student?.group_id || null,
+      amount: Number(amount),
+      payment_method: paymentMethod || 'Naqd',
+      note: note?.trim() || ''
+    });
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/payments/:id', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
+  const tenantOwnerId = getTenantOwnerId(req.user);
+  let query = supabase.from('payments').delete().eq('id', req.params.id);
+  if (tenantOwnerId) query = query.eq('owner_id', tenantOwnerId);
+  const { error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
 
 app.put('/api/students/:id/payment-date', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   const { paymentDueDate, isPaid } = req.body;
-  const { error } = await supabase
+  const tenantOwnerId = getTenantOwnerId(req.user);
+  let query = supabase
     .from('users')
     .update({ payment_due_date: paymentDueDate, is_paid: Boolean(isPaid) })
     .eq('id', req.params.id)
     .eq('role', 'student');
+  if (tenantOwnerId) query = query.eq('owner_id', tenantOwnerId);
+  const { error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
 
 app.delete('/api/users/:id', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
-  const { error } = await supabase.from('users').delete().eq('id', req.params.id);
+  const tenantOwnerId = getTenantOwnerId(req.user);
+  let query = supabase.from('users').delete().eq('id', req.params.id);
+  if (tenantOwnerId) query = query.eq('owner_id', tenantOwnerId);
+  const { error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
@@ -631,11 +782,13 @@ app.post('/api/attendance', authenticate, checkConfig, async (req, res) => {
   try {
     const { groupId, studentId, status } = req.body;
     const today = new Date().toISOString().split('T')[0];
+    const tenantOwnerId = getTenantOwnerId(req.user);
 
     const { error } = await supabase
       .from('attendance')
       .upsert(
         {
+          owner_id: tenantOwnerId,
           group_id: groupId,
           student_id: studentId,
           teacher_id: req.user.id !== 'super_admin' ? req.user.id : null,
@@ -670,7 +823,8 @@ app.post('/api/attendance', authenticate, checkConfig, async (req, res) => {
 });
 
 app.post('/api/trigger-payment-check', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
-  const count = await checkAndNotifyOverduePayments();
+  const tenantOwnerId = getTenantOwnerId(req.user);
+  const count = await checkAndNotifyOverduePayments(tenantOwnerId);
   res.json({ message: `Tekshiruv yakunlandi. ${count} ta ota-onaga Telegram xabar yuborildi.` });
 });
 
