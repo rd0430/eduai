@@ -3,15 +3,21 @@ import axios from 'axios';
 import {
   Building2, Users, Plus, Trash2, CheckCircle2, XCircle,
   ArrowRightLeft, UserCheck, Clock, AlertTriangle, LogOut,
-  CreditCard, BellRing, ChevronRight, Moon, Sun, BookOpen,
+  CreditCard, BellRing, ChevronRight, ChevronLeft, Moon, Sun, BookOpen,
   Wrench, KeyRound, Copy, Check, ShieldCheck, UserPlus,
-  LayoutGrid, Menu, X, Wallet, TrendingUp, AlertCircle, Phone
+  LayoutGrid, Menu, X, Wallet, TrendingUp, AlertCircle, Phone, Calendar
 } from 'lucide-react';
 import StudyTools from './StudyTools.jsx';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 const TELEGRAM_CONTACT_URL = 'https://t.me/roz1matoff_me';
 const TELEGRAM_CONTACT_HANDLE = '@roz1matoff_me';
+
+const UZ_MONTHS = [
+  'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
+  'Iyul', 'Avgust', 'Sentyabr', 'Oktyabr', 'Noyabr', 'Dekabr'
+];
+const UZ_WEEKDAYS = ['Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan', 'Yak'];
 
 function EduAILogo({ size = 'md' }) {
   const dims = size === 'lg' ? 'w-14 h-14 rounded-2xl' : 'w-9 h-9 rounded-xl';
@@ -24,6 +30,147 @@ function EduAILogo({ size = 'md' }) {
         e.currentTarget.style.display = 'none';
       }}
     />
+  );
+}
+
+// ==========================================
+// OYLIK DAVOMAT KALENDARI KOMPONENTI
+// ==========================================
+function AttendanceCalendar({ records = [], studentName = '' }) {
+  const [viewDate, setViewDate] = useState(() => new Date());
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+
+  const statusByDate = {};
+  records.forEach((r) => {
+    if (r.attendance_date) {
+      statusByDate[r.attendance_date] = r.status ? 'present' : 'absent';
+    }
+  });
+
+  const firstDayOfMonth = new Date(year, month, 1);
+  const startOffset = (firstDayOfMonth.getDay() + 6) % 7; // Dushanbadan boshlanadi
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const cells = [];
+  for (let i = 0; i < startOffset; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    cells.push({ day: d, dateStr, status: statusByDate[dateStr] || null });
+  }
+
+  const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const monthRecords = records.filter((r) => String(r.attendance_date || '').startsWith(monthPrefix));
+  const presentCount = monthRecords.filter((r) => r.status === true).length;
+  const absentCount = monthRecords.filter((r) => r.status === false).length;
+  const totalMarked = presentCount + absentCount;
+  const rate = totalMarked > 0 ? Math.round((presentCount / totalMarked) * 100) : 0;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setViewDate(new Date(year, month - 1, 1))}
+            className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+            title="Oldingi oy"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <div className="font-bold text-base sm:text-lg text-slate-900 min-w-[140px] text-center">
+            {UZ_MONTHS[month]} {year}
+          </div>
+          <button
+            type="button"
+            onClick={() => setViewDate(new Date(year, month + 1, 1))}
+            className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+            title="Keyingi oy"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg">
+            Keldi: {presentCount} kun
+          </span>
+          <span className="bg-rose-50 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-lg">
+            Kelmadi: {absentCount} kun
+          </span>
+          <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-lg">
+            Davomat: {rate}%
+          </span>
+        </div>
+      </div>
+
+      {studentName && (
+        <div className="text-xs text-slate-500">
+          O'quvchi: <b className="text-slate-800">{studentName}</b>
+        </div>
+      )}
+
+      <div className="grid grid-cols-7 gap-1.5 text-center text-xs font-bold text-slate-500">
+        {UZ_WEEKDAYS.map((w) => (
+          <div key={w} className="py-1.5">{w}</div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-1.5">
+        {cells.map((cell, idx) => {
+          if (!cell) {
+            return <div key={`empty-${idx}`} className="h-14 sm:h-16 rounded-xl bg-slate-50/50" />;
+          }
+
+          const isPresent = cell.status === 'present';
+          const isAbsent = cell.status === 'absent';
+          const isToday = cell.dateStr === new Date().toISOString().split('T')[0];
+
+          return (
+            <div
+              key={cell.dateStr}
+              className={`h-14 sm:h-16 rounded-xl border p-1.5 sm:p-2 flex flex-col justify-between transition ${
+                isPresent
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                  : isAbsent
+                  ? 'bg-rose-50 border-rose-300 text-rose-900'
+                  : 'bg-slate-50 border-slate-200 text-slate-700'
+              } ${isToday ? 'ring-2 ring-blue-500' : ''}`}
+            >
+              <div className="flex justify-between items-center text-xs font-bold">
+                <span>{cell.day}</span>
+                {isToday && <span className="w-1.5 h-1.5 rounded-full bg-blue-600" title="Bugun" />}
+              </div>
+
+              <div className="flex justify-end items-center">
+                {isPresent && (
+                  <span className="inline-flex items-center text-emerald-600">
+                    <CheckCircle2 size={15} />
+                  </span>
+                )}
+                {isAbsent && (
+                  <span className="inline-flex items-center text-rose-600">
+                    <XCircle size={15} />
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-slate-200 text-xs text-slate-500">
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded bg-emerald-200 border border-emerald-400 inline-block" /> Darsga keldi
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded bg-rose-200 border border-rose-400 inline-block" /> Darsga kelmadi
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded bg-slate-100 border border-slate-300 inline-block" /> Dars yo'q / belgilanmagan
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -60,6 +207,7 @@ export default function App() {
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [ownerTab, setOwnerTab] = useState('branches');
+  const [calendarStudent, setCalendarStudent] = useState(null);
 
   const [createdCredentials, setCreatedCredentials] = useState(null);
   const [copied, setCopied] = useState(false);
@@ -90,7 +238,6 @@ export default function App() {
     name: '', price: '', lessonDays: 'Dush, Chor, Jum', lessonTime: '14:00 - 16:00', teacherId: ''
   });
 
-  // Guruh ichida: avval manba guruhni tanlab, keyin o'quvchini joriy guruhga transfer qilish
   const [transferSourceGroupId, setTransferSourceGroupId] = useState('');
   const [transferStudentId, setTransferStudentId] = useState('');
 
@@ -184,6 +331,7 @@ export default function App() {
     setSelectedBranch(null);
     setSelectedGroup(null);
     setCreatedCredentials(null);
+    setCalendarStudent(null);
   };
 
   const copyCredentials = (cred) => {
@@ -311,10 +459,47 @@ export default function App() {
   };
 
   // ==========================================
+  // DAVOMAT KALENDARI MODAL OYNASI
+  // ==========================================
+  const renderCalendarModal = () => {
+    if (!calendarStudent) return null;
+    return (
+      <div
+        onClick={() => setCalendarStudent(null)}
+        className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 max-w-2xl w-full shadow-2xl space-y-4"
+        >
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+            <h3 className="font-bold text-base sm:text-lg text-slate-900 flex items-center gap-2">
+              <Calendar size={18} className="text-blue-600" /> Davomat Kalendari
+            </h3>
+            <button
+              onClick={() => setCalendarStudent(null)}
+              className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <AttendanceCalendar
+            studentName={calendarStudent.full_name}
+            records={data.attendance.filter((a) => a.student_id === calendarStudent.id)}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  // ==========================================
   // CHAP TOMONDA FIXED SIDEBAR + O'NG TEPADA TELEGRAM CONTACT
   // ==========================================
   const renderSidebarLayout = (navItems, roleSubtitle, children) => (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col lg:flex-row">
+      {renderCalendarModal()}
+
       {mobileMenuOpen && (
         <div
           onClick={() => setMobileMenuOpen(false)}
@@ -450,7 +635,7 @@ export default function App() {
   );
 
   // ==========================================
-  // 2. O'QUVCHI PANELI
+  // 2. O'QUVCHI PANELI (DAVOMAT KALENDARI BILAN)
   // ==========================================
   if (currentUser.role === 'student') {
     const myInfo = data.students.find(s => s.id === currentUser.id);
@@ -536,28 +721,12 @@ export default function App() {
               )}
             </section>
 
+            {/* Oylik Davomat Kalendari */}
             <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm">
-              <h3 className="font-bold text-slate-900 mb-4 text-base">Kundalik davomat tarixi</h3>
-              {myAttendance.length === 0 ? (
-                <p className="text-sm text-slate-500">Hozircha davomat yozuvlari yo'q.</p>
-              ) : (
-                <div className="space-y-2">
-                  {myAttendance.map(att => (
-                    <div key={att.id} className="flex justify-between items-center bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-sm">
-                      <span className="font-mono font-medium">{att.attendance_date}</span>
-                      {att.status ? (
-                        <span className="text-emerald-600 font-semibold flex items-center gap-1">
-                          <CheckCircle2 size={16} /> Keldi
-                        </span>
-                      ) : (
-                        <span className="text-rose-600 font-semibold flex items-center gap-1">
-                          <XCircle size={16} /> Kelmadi
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+              <h3 className="font-bold text-slate-900 mb-4 text-base flex items-center gap-2">
+                <Calendar size={18} className="text-blue-600" /> Oylik Davomat Kalendari
+              </h3>
+              <AttendanceCalendar records={myAttendance} />
             </section>
           </>
         ) : (
@@ -665,19 +834,27 @@ export default function App() {
                     </div>
 
                     <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-                      <table className="w-full min-w-[540px] text-left text-sm">
+                      <table className="w-full min-w-[560px] text-left text-sm">
                         <thead className="text-slate-500 border-b border-slate-200">
                           <tr>
                             <th className="pb-3">O'quvchi</th>
                             <th className="pb-3">To'lov holati</th>
                             <th className="pb-3">To'lov sanasi</th>
-                            <th className="pb-3 text-right">Davomat</th>
+                            <th className="pb-3 text-right">Davomat & Kalendar</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200">
                           {groupStudents.map(st => (
                             <tr key={st.id}>
-                              <td className="py-3.5 font-semibold text-slate-900">{st.full_name}</td>
+                              <td className="py-3.5 font-semibold text-slate-900">
+                                <button
+                                  type="button"
+                                  onClick={() => setCalendarStudent(st)}
+                                  className="hover:text-blue-600 text-left"
+                                >
+                                  {st.full_name}
+                                </button>
+                              </td>
                               <td className="py-3.5">{renderPaymentBadge(st.paymentStatus, st.is_paid)}</td>
                               <td className="py-3.5 font-mono text-xs sm:text-sm text-slate-600">{st.payment_due_date || '-'}</td>
                               <td className="py-3.5 text-right space-x-2 whitespace-nowrap">
@@ -702,6 +879,13 @@ export default function App() {
                                   title="Kelmadi (Qizil X — Ota-onaga Telegram xabar ketadi)"
                                 >
                                   <XCircle size={18} />
+                                </button>
+                                <button
+                                  onClick={() => setCalendarStudent(st)}
+                                  className="p-2 rounded-xl border bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 transition"
+                                  title="Oylik davomat kalendarini ko'rish"
+                                >
+                                  <Calendar size={18} />
                                 </button>
                               </td>
                             </tr>
@@ -1539,6 +1723,13 @@ export default function App() {
                     <div className="flex items-center gap-1.5 shrink-0">
                       {renderPaymentBadge(st.paymentStatus, st.is_paid)}
                       <button
+                        onClick={() => setCalendarStudent(st)}
+                        className="p-2 bg-white border border-slate-200 rounded-lg text-blue-600 hover:bg-blue-50"
+                        title="Davomat kalendari"
+                      >
+                        <Calendar size={15} />
+                      </button>
+                      <button
                         onClick={() => handleResetPassword(st.id)}
                         className="p-2 bg-white border border-slate-200 rounded-lg text-amber-600 hover:bg-amber-50"
                         title="Parolni yangilash"
@@ -1792,10 +1983,9 @@ export default function App() {
         </div>
       )}
 
-      {/* 3-DARAJA: GURUH ICHIDAGI O'QUVCHILAR, GURUHDAN TRANSFER VA DAVOMAT */}
+      {/* 3-DARAJA: GURUH ICHIDAGI O'QUVCHILAR, TRANSFER, DAVOMAT VA KALENDAR */}
       {ownerTab === 'branches' && selectedGroup && (
         <div className="space-y-5">
-          {/* Boshqa guruhdan transfer qilish */}
           <div className="bg-white border border-slate-200 p-4 rounded-2xl space-y-3 shadow-sm">
             <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-800">
               <ArrowRightLeft size={16} className="text-blue-600" />
@@ -1858,7 +2048,7 @@ export default function App() {
             </div>
 
             <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-              <table className="w-full min-w-[740px] text-left text-sm">
+              <table className="w-full min-w-[760px] text-left text-sm">
                 <thead className="text-slate-500 border-b border-slate-200">
                   <tr>
                     <th className="pb-3">O'quvchi & Telefonlar</th>
@@ -1875,7 +2065,13 @@ export default function App() {
                     .map(st => (
                       <tr key={st.id}>
                         <td className="py-3.5 font-semibold text-slate-900">
-                          <div>{st.full_name}</div>
+                          <button
+                            type="button"
+                            onClick={() => setCalendarStudent(st)}
+                            className="hover:text-blue-600 text-left"
+                          >
+                            {st.full_name}
+                          </button>
                           <div className="text-xs text-slate-500">@{st.username} | TG: {st.parent_telegram_chat_id || '-'}</div>
                           {(st.phone1 || st.phone2) && (
                             <div className="text-xs text-blue-600 mt-0.5">
@@ -1945,6 +2141,13 @@ export default function App() {
                           </div>
                         </td>
                         <td className="py-3.5 text-right space-x-1 whitespace-nowrap">
+                          <button
+                            onClick={() => setCalendarStudent(st)}
+                            className="text-blue-600 hover:bg-blue-50 p-1.5 rounded-lg"
+                            title="Oylik davomat kalendarini ko'rish"
+                          >
+                            <Calendar size={16} />
+                          </button>
                           <button
                             onClick={() => handleResetPassword(st.id)}
                             className="text-amber-600 hover:bg-amber-50 p-1.5 rounded-lg"
