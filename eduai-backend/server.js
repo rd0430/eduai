@@ -834,15 +834,23 @@ app.put('/api/students/:id/pay', authenticate, requireAdminOrOwner, checkConfig,
     const tenantOwnerId = getTenantOwnerId(req.user);
     const nextDate = nextPaymentDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
 
-    let stQuery = supabase.from('users').select('id, group_id, owner_id').eq('id', req.params.id).eq('role', 'student');
+    let stQuery = supabase
+      .from('users')
+      .select('id, full_name, group_id, owner_id, parent_telegram_chat_id')
+      .eq('id', req.params.id)
+      .eq('role', 'student');
     if (tenantOwnerId) stQuery = stQuery.eq('owner_id', tenantOwnerId);
     const { data: student } = await stQuery.single();
     if (!student) return res.status(404).json({ error: "O'quvchi topilmadi" });
 
     let amount = Number(customAmount) || 0;
-    if (!amount && student.group_id) {
-      const { data: grp } = await supabase.from('groups').select('price').eq('id', student.group_id).single();
-      amount = Number(grp?.price || 0);
+    let groupName = "O'quv kursi";
+    if (student.group_id) {
+      const { data: grp } = await supabase.from('groups').select('name, price').eq('id', student.group_id).single();
+      if (grp) {
+        groupName = grp.name;
+        if (!amount) amount = Number(grp.price || 0);
+      }
     }
 
     const { error } = await supabase
@@ -862,7 +870,76 @@ app.put('/api/students/:id/pay', authenticate, requireAdminOrOwner, checkConfig,
       });
     }
 
-    res.json({ ok: true });
+    let telegramSent = false;
+    if (student.parent_telegram_chat_id) {
+      const msg =
+        `✅ <b>TO'LOV QABUL QILINDI (EduAI)</b>\n\n` +
+        `Hurmatli ota-ona! Farzandingiz <b>${student.full_name}</b>ning <b>"${groupName}"</b> kursi uchun to'lovi muvaffaqiyatli qabul qilindi.\n` +
+        `💰 To'langan summa: <b>${amount.toLocaleString()} so'm</b> (${paymentMethod})\n` +
+        `📅 Keyingi to'lov sanasi: <b>${nextDate}</b>\n\n` +
+        `Rahmat!`;
+      telegramSent = await sendTelegramMessage(student.parent_telegram_chat_id, msg);
+    }
+
+    res.json({ ok: true, telegramSent });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/payments', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
+  try {
+    const { studentId, amount, paymentMethod, note, markAsPaid = true, nextPaymentDate } = req.body;
+    const tenantOwnerId = getTenantOwnerId(req.user);
+    if (!studentId || !Number(amount)) return res.status(400).json({ error: "O'quvchi va summa kiritilishi shart" });
+
+    const { data: student } = await supabase
+      .from('users')
+      .select('id, full_name, group_id, owner_id, parent_telegram_chat_id')
+      .eq('id', studentId)
+      .single();
+
+    if (!student) return res.status(404).json({ error: "O'quvchi topilmadi" });
+
+    const paidAmount = Number(amount);
+    const method = paymentMethod || 'Naqd';
+
+    const { error } = await supabase.from('payments').insert({
+      owner_id: student.owner_id || tenantOwnerId,
+      student_id: studentId,
+      group_id: student.group_id || null,
+      amount: paidAmount,
+      payment_method: method,
+      note: note?.trim() || "Oylik kurs to'lovi"
+    });
+    if (error) throw error;
+
+    const nextDate = nextPaymentDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+    if (markAsPaid) {
+      await supabase
+        .from('users')
+        .update({ is_paid: true, payment_due_date: nextDate })
+        .eq('id', studentId);
+    }
+
+    let groupName = "O'quv kursi";
+    if (student.group_id) {
+      const { data: grp } = await supabase.from('groups').select('name').eq('id', student.group_id).single();
+      if (grp?.name) groupName = grp.name;
+    }
+
+    let telegramSent = false;
+    if (student.parent_telegram_chat_id) {
+      const msg =
+        `✅ <b>TO'LOV QABUL QILINDI (EduAI)</b>\n\n` +
+        `Hurmatli ota-ona! Farzandingiz <b>${student.full_name}</b>ning <b>"${groupName}"</b> kursi uchun to'lovi muvaffaqiyatli qabul qilindi.\n` +
+        `💰 To'langan summa: <b>${paidAmount.toLocaleString()} so'm</b> (${method})\n` +
+        `📅 Keyingi to'lov sanasi: <b>${nextDate}</b>\n\n` +
+        `Rahmat!`;
+      telegramSent = await sendTelegramMessage(student.parent_telegram_chat_id, msg);
+    }
+
+    res.json({ ok: true, telegramSent });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

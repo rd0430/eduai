@@ -13,6 +13,20 @@ const API = import.meta.env.VITE_API_URL || '/api';
 const TELEGRAM_CONTACT_URL = 'https://t.me/roz1matoff_me';
 const TELEGRAM_CONTACT_HANDLE = '@roz1matoff_me';
 
+function EduAILogo({ size = 'md' }) {
+  const dims = size === 'lg' ? 'w-14 h-14 rounded-2xl' : 'w-9 h-9 rounded-xl';
+  return (
+    <img
+      src="/eduai-logo.jpg"
+      alt="EduAI Logo"
+      className={`${dims} object-cover shadow-sm shrink-0 border border-blue-500/20`}
+      onError={(e) => {
+        e.currentTarget.style.display = 'none';
+      }}
+    />
+  );
+}
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('eduai_user');
@@ -68,16 +82,21 @@ export default function App() {
     phone2: ''
   });
   const [newPaymentForm, setNewPaymentForm] = useState({
-    studentId: '', amount: '', paymentMethod: 'Naqd', note: ''
+    studentId: '', amount: '', paymentMethod: 'Naqd', note: '', nextPaymentDate: ''
   });
 
   const [newBranch, setNewBranch] = useState({ name: '', address: '' });
   const [newGroup, setNewGroup] = useState({
     name: '', price: '', lessonDays: 'Dush, Chor, Jum', lessonTime: '14:00 - 16:00', teacherId: ''
   });
+
+  // Guruh ichida: 'enroll' (yangi biriktirish) yoki 'transfer' (avval guruhni tanlab, keyin o'quvchini o'tkazish)
+  const [groupActionMode, setGroupActionMode] = useState('enroll');
   const [enrollForm, setEnrollForm] = useState({
     studentId: '', paymentDueDate: '', parentTelegramChatId: ''
   });
+  const [transferSourceGroupId, setTransferSourceGroupId] = useState('');
+  const [transferStudentId, setTransferStudentId] = useState('');
 
   useEffect(() => {
     const root = document.documentElement;
@@ -196,7 +215,7 @@ export default function App() {
     }
   };
 
-if (!currentUser) {
+  if (!currentUser) {
     return (
       <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-4 relative">
         <a
@@ -215,8 +234,8 @@ if (!currentUser) {
 
         <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xl">
           <div className="text-center mb-6">
-            <div className="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-3 font-extrabold text-xl shadow-md">
-              E
+            <div className="flex justify-center mb-3">
+              <EduAILogo size="lg" />
             </div>
             <h1 className="text-2xl font-extrabold text-slate-900">EduAI Platform</h1>
             <p className="text-slate-500 text-xs sm:text-sm mt-1">
@@ -268,24 +287,34 @@ if (!currentUser) {
     );
   }
 
-  const renderPaymentBadge = (status) => {
-    if (!status) return null;
+  const renderPaymentBadge = (status, isPaid) => {
+    if (isPaid) {
+      return (
+        <span className="inline-block whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200">
+          To'langan ✓
+        </span>
+      );
+    }
+    if (!status) {
+      return (
+        <span className="inline-block whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-semibold border bg-rose-50 text-rose-700 border-rose-200">
+          To'lanmagan
+        </span>
+      );
+    }
     const colors = {
-      green: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      green: 'bg-amber-50 text-amber-700 border-amber-200',
       yellow: 'bg-amber-50 text-amber-700 border-amber-200',
       red: 'bg-rose-50 text-rose-700 border-rose-200'
     };
     return (
-      <span className={`inline-block whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-semibold border ${colors[status.color] || colors.green}`}>
-        {status.label}
+      <span className={`inline-block whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-semibold border ${colors[status.color] || colors.red}`}>
+        To'lanmagan ({status.label})
       </span>
     );
   };
 
   // ==========================================
-  // CHAP TOMONDA FIXED SIDEBAR + RESPONSIVE DRAWER
-  // ==========================================
- // ==========================================
   // CHAP TOMONDA FIXED SIDEBAR + O'NG TEPADA TELEGRAM CONTACT
   // ==========================================
   const renderSidebarLayout = (navItems, roleSubtitle, children) => (
@@ -305,9 +334,7 @@ if (!currentUser) {
         <div className="overflow-y-auto">
           <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-blue-600 text-white rounded-xl flex items-center justify-center font-extrabold text-lg shrink-0">
-                E
-              </div>
+              <EduAILogo size="md" />
               <div>
                 <div className="font-extrabold text-slate-900 leading-tight">EduAI</div>
                 <div className="text-[11px] text-slate-500 font-medium">{roleSubtitle}</div>
@@ -372,7 +399,6 @@ if (!currentUser) {
       </aside>
 
       <div className="flex-1 lg:ml-64 min-w-0 flex flex-col">
-        {/* Mobil tepa bar */}
         <header className="lg:hidden bg-white border-b border-slate-200 px-3.5 py-2.5 flex items-center justify-between sticky top-0 z-20 shadow-xs">
           <button
             onClick={() => setMobileMenuOpen(true)}
@@ -382,9 +408,12 @@ if (!currentUser) {
             <Menu size={20} />
           </button>
 
-          <div className="text-center">
-            <span className="font-extrabold text-slate-900 block leading-none text-sm">EduAI</span>
-            <span className="text-[10px] text-slate-500">{roleSubtitle}</span>
+          <div className="flex items-center gap-2">
+            <EduAILogo size="md" />
+            <div>
+              <span className="font-extrabold text-slate-900 block leading-none text-sm">EduAI</span>
+              <span className="text-[10px] text-slate-500">{roleSubtitle}</span>
+            </div>
           </div>
 
           <a
@@ -392,16 +421,14 @@ if (!currentUser) {
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 bg-sky-500 hover:bg-sky-600 text-white px-2.5 py-1.5 rounded-xl text-xs font-semibold shadow-xs transition"
-            title="Admin bilan Telegramda bog'lanish"
           >
             <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
               <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
             </svg>
-            <span>Bog'lanish</span>
+            <span>Aloqa</span>
           </a>
         </header>
 
-        {/* Desktop o'ng tomon tepa Contact paneli */}
         <div className="hidden lg:flex items-center justify-end px-6 pt-4 max-w-6xl w-full mx-auto">
           <a
             href={TELEGRAM_CONTACT_URL}
@@ -468,7 +495,7 @@ if (!currentUser) {
                         <span className="text-xs text-slate-500">Guruhingiz</span>
                         <h3 className="text-lg sm:text-xl font-bold text-slate-900">{myGroup.name}</h3>
                       </div>
-                      {renderPaymentBadge(myInfo?.paymentStatus)}
+                      {renderPaymentBadge(myInfo?.paymentStatus, myInfo?.is_paid)}
                     </div>
 
                     <div className="pt-3 border-t border-slate-200 flex justify-between items-center text-sm">
@@ -545,7 +572,7 @@ if (!currentUser) {
   }
 
   // ==========================================
-  // 3. ODDIY O'QITUVCHI PANELI (MARKAZGA BIRIKTIRILGAN)
+  // 3. ODDIY O'QITUVCHI PANELI
   // ==========================================
   if (currentUser.role === 'teacher') {
     const myTeacherProfile = data.teachers.find(t => t.id === currentUser.id);
@@ -655,7 +682,7 @@ if (!currentUser) {
                           {groupStudents.map(st => (
                             <tr key={st.id}>
                               <td className="py-3.5 font-semibold text-slate-900">{st.full_name}</td>
-                              <td className="py-3.5">{renderPaymentBadge(st.paymentStatus)}</td>
+                              <td className="py-3.5">{renderPaymentBadge(st.paymentStatus, st.is_paid)}</td>
                               <td className="py-3.5 font-mono text-xs sm:text-sm text-slate-600">{st.payment_due_date || '-'}</td>
                               <td className="py-3.5 text-right space-x-2 whitespace-nowrap">
                                 <button
@@ -697,7 +724,7 @@ if (!currentUser) {
   }
 
   // ==========================================
-  // 4. ADMIN (GMAIL), MARKAZ EGASI VA MUSTAQIL O'QITUVCHI (SOLO_TEACHER) PANELI
+  // 4. ADMIN, MARKAZ EGASI VA MUSTAQIL O'QITUVCHI PANELI
   // ==========================================
   const isSoloTeacher = currentUser.role === 'solo_teacher';
 
@@ -756,9 +783,18 @@ if (!currentUser) {
   const handleAddManualPayment = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${API}/payments`, newPaymentForm, authHeaders);
-      setNewPaymentForm({ studentId: '', amount: '', paymentMethod: 'Naqd', note: '' });
+      const res = await axios.post(
+        `${API}/payments`,
+        { ...newPaymentForm, markAsPaid: true },
+        authHeaders
+      );
+      setNewPaymentForm({ studentId: '', amount: '', paymentMethod: 'Naqd', note: '', nextPaymentDate: '' });
       fetchData();
+      if (res.data?.telegramSent) {
+        alert("To'lov qabul qilindi va ota-onaga Telegram orqali xabar yuborildi!");
+      } else {
+        alert("To'lov muvaffaqiyatli qabul qilindi!");
+      }
     } catch (err) {
       alert(err.response?.data?.error || "To'lov qo'shishda xatolik yuz berdi!");
     }
@@ -823,6 +859,22 @@ if (!currentUser) {
       fetchData();
     } catch (err) {
       alert(err.response?.data?.error || "O'quvchini guruhga qo'shishda xatolik!");
+    }
+  };
+
+  const handleTransferFromSelectedGroup = async (e) => {
+    e.preventDefault();
+    if (!transferStudentId) return;
+    try {
+      await axios.put(
+        `${API}/students/${transferStudentId}/transfer`,
+        { newGroupId: selectedGroup.id },
+        authHeaders
+      );
+      setTransferStudentId('');
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.error || "O'quvchini transfer qilishda xatolik!");
     }
   };
 
@@ -959,7 +1011,7 @@ if (!currentUser) {
         </div>
       )}
 
-      {/* MARKAZ ICHKI MOLIYASI */}
+      {/* MARKAZ ICHKI MOLIYASI (TO'LOV QABUL QILISH VA KASSA) */}
       {ownerTab === 'finance' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1004,6 +1056,72 @@ if (!currentUser) {
                 {fin.upcomingExpected.toLocaleString()} <span className="text-xs font-medium text-slate-500">so'm</span>
               </div>
             </div>
+          </div>
+
+          {/* O'quvchidan oylik to'lov qabul qilish (Ota-onaga Telegram xabar yuboradi) */}
+          <div className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl space-y-3 shadow-sm">
+            <div className="flex flex-wrap justify-between items-center gap-2">
+              <h2 className="text-base font-bold text-slate-900">
+                O'quvchidan oylik to'lov qabul qilish (Kassaga kirim + Telegram chek)
+              </h2>
+              <span className="text-xs text-slate-500">
+                To'lov kiritilganda o'quvchi statusi "To'langan ✓" bo'ladi va ota-onaga xabar ketadi
+              </span>
+            </div>
+
+            <form onSubmit={handleAddManualPayment} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+              <select
+                required
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm lg:col-span-2"
+                value={newPaymentForm.studentId}
+                onChange={e => {
+                  const st = data.students.find(s => s.id === e.target.value);
+                  setNewPaymentForm({
+                    ...newPaymentForm,
+                    studentId: e.target.value,
+                    amount: st?.coursePrice || ''
+                  });
+                }}
+              >
+                <option value="">O'quvchini tanlang...</option>
+                {data.students.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.full_name} ({s.groupName}) — {s.is_paid ? "To'langan" : "To'lanmagan"}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                type="number"
+                placeholder="Summa (so'm)"
+                required
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
+                value={newPaymentForm.amount}
+                onChange={e => setNewPaymentForm({ ...newPaymentForm, amount: e.target.value })}
+              />
+
+              <select
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
+                value={newPaymentForm.paymentMethod}
+                onChange={e => setNewPaymentForm({ ...newPaymentForm, paymentMethod: e.target.value })}
+              >
+                <option value="Naqd">Naqd pul</option>
+                <option value="Karta / P2P">Karta / P2P</option>
+                <option value="Click / Payme">Click / Payme</option>
+              </select>
+
+              <input
+                type="date"
+                title="Keyingi to'lov sanasi (ixtiyoriy, sukut bo'yicha +30 kun)"
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
+                value={newPaymentForm.nextPaymentDate}
+                onChange={e => setNewPaymentForm({ ...newPaymentForm, nextPaymentDate: e.target.value })}
+              />
+
+              <button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 py-2.5">
+                <CheckCircle2 size={16} /> To'lovni tasdiqlash
+              </button>
+            </form>
           </div>
 
           {!isSoloTeacher && (
@@ -1071,54 +1189,6 @@ if (!currentUser) {
               )}
             </div>
           )}
-
-          <form onSubmit={handleAddManualPayment} className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 shadow-sm">
-            <select
-              required
-              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
-              value={newPaymentForm.studentId}
-              onChange={e => {
-                const st = data.students.find(s => s.id === e.target.value);
-                setNewPaymentForm({
-                  ...newPaymentForm,
-                  studentId: e.target.value,
-                  amount: st?.coursePrice || ''
-                });
-              }}
-            >
-              <option value="">O'quvchini tanlang...</option>
-              {data.students.map(s => (
-                <option key={s.id} value={s.id}>{s.full_name} ({s.groupName})</option>
-              ))}
-            </select>
-            <input
-              type="number"
-              placeholder="Summa (so'm)"
-              required
-              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
-              value={newPaymentForm.amount}
-              onChange={e => setNewPaymentForm({ ...newPaymentForm, amount: e.target.value })}
-            />
-            <select
-              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
-              value={newPaymentForm.paymentMethod}
-              onChange={e => setNewPaymentForm({ ...newPaymentForm, paymentMethod: e.target.value })}
-            >
-              <option value="Naqd">Naqd pul</option>
-              <option value="Karta / P2P">Karta / P2P</option>
-              <option value="Click / Payme">Click / Payme</option>
-            </select>
-            <input
-              type="text"
-              placeholder="Izoh (ixtiyoriy)"
-              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
-              value={newPaymentForm.note}
-              onChange={e => setNewPaymentForm({ ...newPaymentForm, note: e.target.value })}
-            />
-            <button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 py-2.5">
-              <Plus size={16} /> Kirim qo'shish
-            </button>
-          </form>
 
           <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm">
             <h2 className="text-base sm:text-lg font-bold text-slate-900 mb-4">Kassa kirimlar tarixi</h2>
@@ -1276,7 +1346,7 @@ if (!currentUser) {
         </div>
       )}
 
-      {/* JAMOA VA O'QUVCHILAR LOGIN-PAROL YARATISH (2 TA IXTIYORIY TELEFON RAQAM BILAN) */}
+      {/* JAMOA VA O'QUVCHILAR LOGIN-PAROL YARATISH */}
       {ownerTab === 'accounts' && (
         <div className="space-y-6">
           {currentUser.role === 'center_owner' && (
@@ -1411,7 +1481,6 @@ if (!currentUser) {
               </div>
             )}
 
-            {/* O'QUVCHI QO'SHISH FORMASI (2 TA IXTIYORIY TELEFON RAQAM BILAN) */}
             <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-5 shadow-sm">
               <h2 className="text-base sm:text-lg font-bold text-slate-900">
                 {isSoloTeacher ? "O'quvchiga Login va Parol berish" : "2. O'quvchiga Login va Parol berish"}
@@ -1492,7 +1561,7 @@ if (!currentUser) {
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {renderPaymentBadge(st.paymentStatus)}
+                      {renderPaymentBadge(st.paymentStatus, st.is_paid)}
                       <button
                         onClick={() => handleResetPassword(st.id)}
                         className="p-2 bg-white border border-slate-200 rounded-lg text-amber-600 hover:bg-amber-50"
@@ -1519,7 +1588,7 @@ if (!currentUser) {
         </div>
       )}
 
-      {/* 1-DARAJA: FILIALLAR (YOKI REPETITORNING XONASI / MANZILI) */}
+      {/* 1-DARAJA: FILIALLAR */}
       {ownerTab === 'branches' && !selectedBranch && (
         <div className="space-y-5">
           <form onSubmit={handleAddBranch} className="bg-white border border-slate-200 p-4 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-3 shadow-sm">
@@ -1665,7 +1734,7 @@ if (!currentUser) {
                   <div>
                     <div className="flex justify-between items-start gap-2">
                       <h3
-                        onClick={() => setSelectedGroup(group)}
+                        onClick={() => { setSelectedGroup(group); setTransferSourceGroupId(''); setTransferStudentId(''); }}
                         className="text-lg sm:text-xl font-bold text-slate-900 cursor-pointer hover:text-blue-600"
                       >
                         {group.name}
@@ -1736,7 +1805,7 @@ if (!currentUser) {
                   </div>
 
                   <button
-                    onClick={() => setSelectedGroup(group)}
+                    onClick={() => { setSelectedGroup(group); setTransferSourceGroupId(''); setTransferStudentId(''); }}
                     className="mt-5 w-full bg-slate-100 hover:bg-blue-600 text-slate-800 hover:text-white py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition"
                   >
                     <Users size={16} /> O'quvchilar va Davomat
@@ -1747,54 +1816,130 @@ if (!currentUser) {
         </div>
       )}
 
-      {/* 3-DARAJA: GURUH ICHIDAGI O'QUVCHILAR, TELEFON RAQAMLAR VA DAVOMAT */}
+      {/* 3-DARAJA: GURUH ICHIDAGI O'QUVCHILAR, GURUHDAN TRANSFER VA DAVOMAT */}
       {ownerTab === 'branches' && selectedGroup && (
         <div className="space-y-5">
-          <form onSubmit={handleEnrollStudent} className="bg-white border border-slate-200 p-4 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 shadow-sm">
-            <select
-              required
-              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-              value={enrollForm.studentId}
-              onChange={e => setEnrollForm({ ...enrollForm, studentId: e.target.value })}
-            >
-              <option value="">O'quvchini tanlang...</option>
-              {data.students.map(s => (
-                <option key={s.id} value={s.id}>{s.full_name} (@{s.username})</option>
-              ))}
-            </select>
-            <input
-              type="date"
-              required
-              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-              value={enrollForm.paymentDueDate}
-              onChange={e => setEnrollForm({ ...enrollForm, paymentDueDate: e.target.value })}
-            />
-            <input
-              type="text"
-              placeholder="Ota-ona Telegram Chat ID"
-              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-              value={enrollForm.parentTelegramChatId}
-              onChange={e => setEnrollForm({ ...enrollForm, parentTelegramChatId: e.target.value })}
-            />
-            <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold">
-              + Guruhga qo'shish
-            </button>
-          </form>
+          {/* O'quvchi qo'shish yoki Boshqa guruhdan transfer qilish */}
+          <div className="bg-white border border-slate-200 p-4 rounded-2xl space-y-3 shadow-sm">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setGroupActionMode('enroll')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                  groupActionMode === 'enroll' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
+                }`}
+              >
+                + Guruhga o'quvchi qo'shish
+              </button>
+              <button
+                type="button"
+                onClick={() => setGroupActionMode('transfer')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                  groupActionMode === 'transfer' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
+                }`}
+              >
+                <ArrowRightLeft size={14} /> Boshqa guruhdan transfer qilish
+              </button>
+            </div>
+
+            {groupActionMode === 'enroll' ? (
+              <form onSubmit={handleEnrollStudent} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <select
+                  required
+                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+                  value={enrollForm.studentId}
+                  onChange={e => setEnrollForm({ ...enrollForm, studentId: e.target.value })}
+                >
+                  <option value="">O'quvchini tanlang...</option>
+                  {data.students.map(s => (
+                    <option key={s.id} value={s.id}>{s.full_name} (@{s.username})</option>
+                  ))}
+                </select>
+                <input
+                  type="date"
+                  required
+                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+                  value={enrollForm.paymentDueDate}
+                  onChange={e => setEnrollForm({ ...enrollForm, paymentDueDate: e.target.value })}
+                />
+                <input
+                  type="text"
+                  placeholder="Ota-ona Telegram Chat ID"
+                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+                  value={enrollForm.parentTelegramChatId}
+                  onChange={e => setEnrollForm({ ...enrollForm, parentTelegramChatId: e.target.value })}
+                />
+                <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold">
+                  + Guruhga qo'shish
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleTransferFromSelectedGroup} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* 1-qadam: Avval qaysi guruhdan o'tkazishni tanlaydi */}
+                <select
+                  required
+                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+                  value={transferSourceGroupId}
+                  onChange={e => {
+                    setTransferSourceGroupId(e.target.value);
+                    setTransferStudentId('');
+                  }}
+                >
+                  <option value="">1. Qaysi guruhdan (guruhni tanlang)...</option>
+                  {data.groups
+                    .filter(g => g.id !== selectedGroup.id)
+                    .map(g => (
+                      <option key={g.id} value={g.id}>{g.name} ({g.studentCount} ta o'quvchi)</option>
+                    ))}
+                </select>
+
+                {/* 2-qadam: Tanlangan guruhdagi o'quvchini tanlaydi */}
+                <select
+                  required
+                  disabled={!transferSourceGroupId}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm disabled:opacity-50"
+                  value={transferStudentId}
+                  onChange={e => setTransferStudentId(e.target.value)}
+                >
+                  <option value="">2. O'quvchini tanlang...</option>
+                  {data.students
+                    .filter(s => s.group_id === transferSourceGroupId)
+                    .map(s => (
+                      <option key={s.id} value={s.id}>{s.full_name} (@{s.username})</option>
+                    ))}
+                </select>
+
+                <button
+                  disabled={!transferStudentId}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+                >
+                  <ArrowRightLeft size={16} /> "{selectedGroup.name}" guruhiga o'tkazish
+                </button>
+              </form>
+            )}
+          </div>
 
           <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 overflow-x-auto shadow-sm">
-            <h2 className="text-base sm:text-lg font-bold text-slate-900 mb-4">
-              {selectedGroup.name} — O'quvchilar (Narxi: {Number(selectedGroup.price).toLocaleString()} so'm)
-            </h2>
+            <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                {selectedGroup.name} — O'quvchilar (Narxi: {Number(selectedGroup.price).toLocaleString()} so'm)
+              </h2>
+              <button
+                onClick={() => { setOwnerTab('finance'); setSelectedGroup(null); }}
+                className="text-xs font-semibold text-blue-600 hover:underline flex items-center gap-1"
+              >
+                <Wallet size={14} /> To'lov qabul qilish (Moliya & Kassa) →
+              </button>
+            </div>
 
             <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-              <table className="w-full min-w-[820px] text-left text-sm">
+              <table className="w-full min-w-[740px] text-left text-sm">
                 <thead className="text-slate-500 border-b border-slate-200">
                   <tr>
                     <th className="pb-3">O'quvchi & Telefonlar</th>
                     <th className="pb-3">Bugungi davomat</th>
                     <th className="pb-3">To'lov sanasi</th>
                     <th className="pb-3">Holati</th>
-                    <th className="pb-3">To'lov qildi</th>
                     <th className="pb-3">Transfer</th>
                     <th className="pb-3 text-right">Amallar</th>
                   </tr>
@@ -1852,22 +1997,7 @@ if (!currentUser) {
                             }}
                           />
                         </td>
-                        <td className="py-3.5">{renderPaymentBadge(st.paymentStatus)}</td>
-                        <td className="py-3.5">
-                          <button
-                            onClick={async () => {
-                              await axios.put(`${API}/students/${st.id}/pay`, {}, authHeaders);
-                              fetchData();
-                            }}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition whitespace-nowrap ${
-                              st.is_paid
-                                ? 'bg-emerald-600 text-white border-emerald-600'
-                                : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-600 hover:text-white'
-                            }`}
-                          >
-                            <CheckCircle2 size={15} /> {st.is_paid ? "To'langan ✓" : "To'lov qildi"}
-                          </button>
-                        </td>
+                        <td className="py-3.5">{renderPaymentBadge(st.paymentStatus, st.is_paid)}</td>
                         <td className="py-3.5">
                           <div className="flex items-center gap-1">
                             <ArrowRightLeft size={13} className="text-slate-400 shrink-0" />
