@@ -90,11 +90,7 @@ export default function App() {
     name: '', price: '', lessonDays: 'Dush, Chor, Jum', lessonTime: '14:00 - 16:00', teacherId: ''
   });
 
-  // Guruh ichida: 'enroll' (yangi biriktirish) yoki 'transfer' (avval guruhni tanlab, keyin o'quvchini o'tkazish)
-  const [groupActionMode, setGroupActionMode] = useState('enroll');
-  const [enrollForm, setEnrollForm] = useState({
-    studentId: '', paymentDueDate: '', parentTelegramChatId: ''
-  });
+  // Guruh ichida: avval manba guruhni tanlab, keyin o'quvchini joriy guruhga transfer qilish
   const [transferSourceGroupId, setTransferSourceGroupId] = useState('');
   const [transferStudentId, setTransferStudentId] = useState('');
 
@@ -843,25 +839,6 @@ export default function App() {
     }
   };
 
-  const handleEnrollStudent = async (e) => {
-    e.preventDefault();
-    try {
-      await axios.put(
-        `${API}/students/${enrollForm.studentId}/enroll`,
-        {
-          groupId: selectedGroup.id,
-          paymentDueDate: enrollForm.paymentDueDate,
-          parentTelegramChatId: enrollForm.parentTelegramChatId
-        },
-        authHeaders
-      );
-      setEnrollForm({ studentId: '', paymentDueDate: '', parentTelegramChatId: '' });
-      fetchData();
-    } catch (err) {
-      alert(err.response?.data?.error || "O'quvchini guruhga qo'shishda xatolik!");
-    }
-  };
-
   const handleTransferFromSelectedGroup = async (e) => {
     e.preventDefault();
     if (!transferStudentId) return;
@@ -1058,7 +1035,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* O'quvchidan oylik to'lov qabul qilish (Ota-onaga Telegram xabar yuboradi) */}
           <div className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl space-y-3 shadow-sm">
             <div className="flex flex-wrap justify-between items-center gap-2">
               <h2 className="text-base font-bold text-slate-900">
@@ -1819,104 +1795,53 @@ export default function App() {
       {/* 3-DARAJA: GURUH ICHIDAGI O'QUVCHILAR, GURUHDAN TRANSFER VA DAVOMAT */}
       {ownerTab === 'branches' && selectedGroup && (
         <div className="space-y-5">
-          {/* O'quvchi qo'shish yoki Boshqa guruhdan transfer qilish */}
+          {/* Boshqa guruhdan transfer qilish */}
           <div className="bg-white border border-slate-200 p-4 rounded-2xl space-y-3 shadow-sm">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setGroupActionMode('enroll')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
-                  groupActionMode === 'enroll' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
-                }`}
-              >
-                + Guruhga o'quvchi qo'shish
-              </button>
-              <button
-                type="button"
-                onClick={() => setGroupActionMode('transfer')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
-                  groupActionMode === 'transfer' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
-                }`}
-              >
-                <ArrowRightLeft size={14} /> Boshqa guruhdan transfer qilish
-              </button>
+            <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-800">
+              <ArrowRightLeft size={16} className="text-blue-600" />
+              <span>Boshqa guruhdan "{selectedGroup.name}" guruhiga o'quvchi o'tkazish (Transfer)</span>
             </div>
 
-            {groupActionMode === 'enroll' ? (
-              <form onSubmit={handleEnrollStudent} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <select
-                  required
-                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-                  value={enrollForm.studentId}
-                  onChange={e => setEnrollForm({ ...enrollForm, studentId: e.target.value })}
-                >
-                  <option value="">O'quvchini tanlang...</option>
-                  {data.students.map(s => (
+            <form onSubmit={handleTransferFromSelectedGroup} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <select
+                required
+                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+                value={transferSourceGroupId}
+                onChange={e => {
+                  setTransferSourceGroupId(e.target.value);
+                  setTransferStudentId('');
+                }}
+              >
+                <option value="">1. Qaysi guruhdan (guruhni tanlang)...</option>
+                {data.groups
+                  .filter(g => g.id !== selectedGroup.id)
+                  .map(g => (
+                    <option key={g.id} value={g.id}>{g.name} ({g.studentCount} ta o'quvchi)</option>
+                  ))}
+              </select>
+
+              <select
+                required
+                disabled={!transferSourceGroupId}
+                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm disabled:opacity-50"
+                value={transferStudentId}
+                onChange={e => setTransferStudentId(e.target.value)}
+              >
+                <option value="">2. O'quvchini tanlang...</option>
+                {data.students
+                  .filter(s => s.group_id === transferSourceGroupId)
+                  .map(s => (
                     <option key={s.id} value={s.id}>{s.full_name} (@{s.username})</option>
                   ))}
-                </select>
-                <input
-                  type="date"
-                  required
-                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-                  value={enrollForm.paymentDueDate}
-                  onChange={e => setEnrollForm({ ...enrollForm, paymentDueDate: e.target.value })}
-                />
-                <input
-                  type="text"
-                  placeholder="Ota-ona Telegram Chat ID"
-                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-                  value={enrollForm.parentTelegramChatId}
-                  onChange={e => setEnrollForm({ ...enrollForm, parentTelegramChatId: e.target.value })}
-                />
-                <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold">
-                  + Guruhga qo'shish
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={handleTransferFromSelectedGroup} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* 1-qadam: Avval qaysi guruhdan o'tkazishni tanlaydi */}
-                <select
-                  required
-                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-                  value={transferSourceGroupId}
-                  onChange={e => {
-                    setTransferSourceGroupId(e.target.value);
-                    setTransferStudentId('');
-                  }}
-                >
-                  <option value="">1. Qaysi guruhdan (guruhni tanlang)...</option>
-                  {data.groups
-                    .filter(g => g.id !== selectedGroup.id)
-                    .map(g => (
-                      <option key={g.id} value={g.id}>{g.name} ({g.studentCount} ta o'quvchi)</option>
-                    ))}
-                </select>
+              </select>
 
-                {/* 2-qadam: Tanlangan guruhdagi o'quvchini tanlaydi */}
-                <select
-                  required
-                  disabled={!transferSourceGroupId}
-                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm disabled:opacity-50"
-                  value={transferStudentId}
-                  onChange={e => setTransferStudentId(e.target.value)}
-                >
-                  <option value="">2. O'quvchini tanlang...</option>
-                  {data.students
-                    .filter(s => s.group_id === transferSourceGroupId)
-                    .map(s => (
-                      <option key={s.id} value={s.id}>{s.full_name} (@{s.username})</option>
-                    ))}
-                </select>
-
-                <button
-                  disabled={!transferStudentId}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
-                >
-                  <ArrowRightLeft size={16} /> "{selectedGroup.name}" guruhiga o'tkazish
-                </button>
-              </form>
-            )}
+              <button
+                disabled={!transferStudentId}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+              >
+                <ArrowRightLeft size={16} /> "{selectedGroup.name}" guruhiga o'tkazish
+              </button>
+            </form>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 overflow-x-auto shadow-sm">
