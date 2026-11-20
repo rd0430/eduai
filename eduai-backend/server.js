@@ -106,7 +106,6 @@ async function sendTelegramMessage(chatId, text) {
   }
 }
 
-// To'lov holatini hisoblash (Yashil / 3 kundan kam Sariq / Muddati o'tgan Qizil)
 function getPaymentStatus(isPaid, dueDateStr) {
   if (isPaid) {
     return { color: 'green', label: "To'langan ✓", isOverdue: false };
@@ -129,7 +128,6 @@ function getPaymentStatus(isPaid, dueDateStr) {
   return { color: 'green', label: `${diffDays} kun bor`, isOverdue: false };
 }
 
-// Muddati o'tgan (qizil) o'quvchilarga avtomatik xabar yuborish funksiyasi
 async function checkAndNotifyOverduePayments() {
   if (!supabase) return 0;
   const { data: students } = await supabase
@@ -161,7 +159,6 @@ async function checkAndNotifyOverduePayments() {
   return sentCount;
 }
 
-// Har 6 soatda avtomatik tekshiruv
 setInterval(() => {
   checkAndNotifyOverduePayments().catch(() => {});
 }, 6 * 60 * 60 * 1000);
@@ -185,16 +182,16 @@ const authenticate = (req, res, next) => {
   }
 };
 
-const requireAdminOrOwner = (req, res, next) => {
-  if (req.user?.role !== 'admin' && req.user?.role !== 'center_owner') {
-    return res.status(403).json({ error: 'Faqat Admin yoki O‘quv markaz egasi uchun!' });
+const requireSuperAdmin = (req, res, next) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Faqat Super Admin (Gmail) uchun!' });
   }
   next();
 };
 
-const requireTeacher = (req, res, next) => {
-  if (req.user?.role !== 'teacher') {
-    return res.status(403).json({ error: 'Faqat O‘qituvchi uchun!' });
+const requireAdminOrOwner = (req, res, next) => {
+  if (req.user?.role !== 'admin' && req.user?.role !== 'center_owner') {
+    return res.status(403).json({ error: 'Faqat Admin yoki O‘quv markaz egasi uchun!' });
   }
   next();
 };
@@ -204,69 +201,47 @@ app.get('/api/health', (req, res) => {
 });
 
 // ==========================================
-// 4. YAGONA AUTH (REGISTER + LOGIN + GOOGLE ADMIN)
+// 4. AUTHENTICATION (FAQAT LOGIN VA GMAIL ADMIN)
 // ==========================================
-app.get('/api/public/groups', checkConfig, async (req, res) => {
-  const { data: branches } = await supabase.from('branches').select('id, name');
-  const { data: groups } = await supabase.from('groups').select('id, name, price, lesson_days, lesson_time, branch_id');
-  const bMap = Object.fromEntries((branches || []).map(b => [b.id, b.name]));
-  res.json((groups || []).map(g => ({
-    ...g,
-    branchName: bMap[g.branch_id] || 'Asosiy filial'
-  })));
+app.get('/api/auth/google-config', (req, res) => {
+  res.json({ googleClientId: process.env.GOOGLE_CLIENT_ID || '' });
 });
 
-app.post('/api/auth/register', loginLimiter, checkConfig, async (req, res) => {
+app.post('/api/auth/google-admin', loginLimiter, async (req, res) => {
   try {
-    const { fullName, username, password, role, subject, groupId, parentTelegramChatId } = req.body;
-    const allowedRoles = ['student', 'teacher', 'center_owner', 'admin'];
-    if (!fullName?.trim() || !username?.trim() || !password || !allowedRoles.includes(role)) {
-      return res.status(400).json({ error: 'Barcha majburiy maydonlarni to‘ldiring' });
+    if (!googleClient) return res.status(500).json({ error: 'GOOGLE_CLIENT_ID kiritilmagan!' });
+    const { credential } = req.body;
+    if (!credential) return res.status(400).json({ error: 'Google token yuborilmadi' });
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID
+    });
+    const payload = ticket.getPayload();
+    const allowedAdminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+
+    if (!payload?.email || (allowedAdminEmail && payload.email.toLowerCase() !== allowedAdminEmail)) {
+      return res.status(403).json({ error: 'Ushbu Gmail akkauntga Admin ruxsati berilmagan!' });
     }
 
-    const cleanUsername = String(username).trim().toLowerCase();
-    const passwordHash = await bcrypt.hash(String(password), 10);
-    const defaultDueDate = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+    const token = jwt.sign(
+      { id: 'super_admin', role: 'admin', email: payload.email },
+      getJwtSecret(),
+      { expiresIn: '7d' }
+    );
 
-    const { data: user, error } = await supabase
-      .from('users')
-      .insert({
-        role,
-        full_name: fullName.trim().slice(0, 120),
-        subject: role === 'teacher' ? (subject?.trim() || 'Umumiy fan') : null,
-        username: cleanUsername,
-        password_hash: passwordHash,
-        group_id: role === 'student' && groupId ? groupId : null,
-        payment_due_date: role === 'student' ? defaultDueDate : null,
-        is_paid: false,
-        parent_telegram_chat_id: role === 'student' && parentTelegramChatId ? String(parentTelegramChatId).trim() : null,
-        is_active: true
-      })
-      .select('id, full_name, subject, username, role, group_id, xp_points, streak_days, avatar_url')
-      .single();
-
-    if (error) {
-      if (error.code === '23505') return res.status(400).json({ error: 'Bu login allaqachon band!' });
-      throw error;
-    }
-
-    const token = jwt.sign({ id: user.id, role: user.role, group_id: user.group_id }, getJwtSecret(), { expiresIn: '7d' });
     res.json({
       token,
       user: {
-        id: user.id,
-        fullName: user.full_name,
-        subject: user.subject,
-        username: user.username,
-        role: user.role,
-        groupId: user.group_id,
-        xp: user.xp_points || 0,
-        streak: user.streak_days || 1,
-        avatarUrl: user.avatar_url
+        id: 'super_admin',
+        fullName: payload.name || 'Super Admin',
+        username: payload.email,
+        role: 'admin',
+        avatarUrl: payload.picture
       }
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(401).json({ error: 'Google Gmail kirish xatosi: ' + err.message });
   }
 });
 
@@ -320,22 +295,6 @@ app.post('/api/auth/login', loginLimiter, checkConfig, async (req, res) => {
   }
 });
 
-app.post('/api/auth/google-admin', loginLimiter, async (req, res) => {
-  try {
-    if (!googleClient) return res.status(500).json({ error: 'GOOGLE_CLIENT_ID kiritilmagan!' });
-    const { credential } = req.body;
-    const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: process.env.GOOGLE_CLIENT_ID });
-    const payload = ticket.getPayload();
-    if (!payload?.email || payload.email.toLowerCase() !== (process.env.ADMIN_EMAIL || '').toLowerCase()) {
-      return res.status(403).json({ error: 'Ushbu Google akkauntga Admin ruxsati berilmagan!' });
-    }
-    const token = jwt.sign({ id: 'super_admin', role: 'admin', email: payload.email }, getJwtSecret(), { expiresIn: '7d' });
-    res.json({ token, user: { id: 'super_admin', fullName: payload.name || 'Super Admin', username: payload.email, role: 'admin', avatarUrl: payload.picture } });
-  } catch (err) {
-    res.status(401).json({ error: 'Google xatosi: ' + err.message });
-  }
-});
-
 app.post('/api/auth/logout', authenticate, async (req, res) => {
   if (supabase && req.user.id !== 'super_admin') {
     await supabase.from('users').update({ is_online: false }).eq('id', req.user.id);
@@ -344,7 +303,143 @@ app.post('/api/auth/logout', authenticate, async (req, res) => {
 });
 
 // ==========================================
-// 5. MAHALLA -> UY -> XONA (MARKAZ EGASI / ADMIN / O'QITUVCHI / O'QUVCHI DATA)
+// 5. ADMIN (GMAIL) -> CENTER OWNER YARATISH VA BOSHQARISH
+// ==========================================
+app.post('/api/admin/center-owners', authenticate, requireSuperAdmin, checkConfig, async (req, res) => {
+  try {
+    const { fullName, centerName } = req.body;
+    if (!fullName?.trim()) return res.status(400).json({ error: 'Ism-familiya kiritilishi shart' });
+
+    const cleanFirst = fullName.trim().split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'owner';
+    const username = `owner_${cleanFirst}_${Math.floor(100 + Math.random() * 900)}`;
+    const plainPassword = String(Math.floor(100000 + Math.random() * 900000));
+    const passwordHash = await bcrypt.hash(plainPassword, 10);
+
+    const { data: owner, error } = await supabase
+      .from('users')
+      .insert({
+        role: 'center_owner',
+        full_name: fullName.trim().slice(0, 120),
+        subject: centerName?.trim().slice(0, 100) || "O'quv markaz",
+        username,
+        password_hash: passwordHash,
+        is_active: true
+      })
+      .select('id, full_name, subject, username')
+      .single();
+
+    if (error) throw error;
+    res.json({
+      id: owner.id,
+      fullName: owner.full_name,
+      centerName: owner.subject,
+      username,
+      plainPassword
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 6. CENTER OWNER -> O'QITUVCHI VA O'QUVCHI LOGIN-PAROL YARATISH
+// ==========================================
+app.post('/api/owner/teachers', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
+  try {
+    const { fullName, subject } = req.body;
+    if (!fullName?.trim()) return res.status(400).json({ error: 'O‘qituvchi ism-familiyasi shart' });
+
+    const cleanFirst = fullName.trim().split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'ustoz';
+    const username = `ustoz_${cleanFirst}_${Math.floor(100 + Math.random() * 900)}`;
+    const plainPassword = String(Math.floor(100000 + Math.random() * 900000));
+    const passwordHash = await bcrypt.hash(plainPassword, 10);
+
+    const { data: teacher, error } = await supabase
+      .from('users')
+      .insert({
+        role: 'teacher',
+        full_name: fullName.trim().slice(0, 120),
+        subject: subject?.trim().slice(0, 80) || 'Umumiy fan',
+        username,
+        password_hash: passwordHash,
+        is_active: true
+      })
+      .select('id, full_name, subject, username')
+      .single();
+
+    if (error) throw error;
+    res.json({
+      id: teacher.id,
+      fullName: teacher.full_name,
+      subject: teacher.subject,
+      username,
+      plainPassword
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/owner/students', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
+  try {
+    const { fullName, groupId, paymentDueDate, parentTelegramChatId } = req.body;
+    if (!fullName?.trim()) return res.status(400).json({ error: 'O‘quvchi ism-familiyasi shart' });
+
+    const cleanFirst = fullName.trim().split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'student';
+    const username = `${cleanFirst}_${Math.floor(100 + Math.random() * 900)}`;
+    const plainPassword = String(Math.floor(100000 + Math.random() * 900000));
+    const passwordHash = await bcrypt.hash(plainPassword, 10);
+    const dueDate = paymentDueDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+
+    const { data: student, error } = await supabase
+      .from('users')
+      .insert({
+        role: 'student',
+        full_name: fullName.trim().slice(0, 120),
+        username,
+        password_hash: passwordHash,
+        group_id: groupId || null,
+        payment_due_date: dueDate,
+        is_paid: false,
+        parent_telegram_chat_id: parentTelegramChatId ? String(parentTelegramChatId).trim() : null,
+        is_active: true
+      })
+      .select('id, full_name, username, group_id, payment_due_date')
+      .single();
+
+    if (error) throw error;
+    res.json({
+      id: student.id,
+      fullName: student.full_name,
+      username,
+      plainPassword
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Istalgan foydalanuvchi (owner, teacher, student) parolini yangilash
+app.post('/api/users/:id/reset-password', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
+  try {
+    const plainPassword = String(Math.floor(100000 + Math.random() * 900000));
+    const passwordHash = await bcrypt.hash(plainPassword, 10);
+    const { data: user, error } = await supabase
+      .from('users')
+      .update({ password_hash: passwordHash })
+      .eq('id', req.params.id)
+      .select('full_name, username, role')
+      .single();
+
+    if (error || !user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
+    res.json({ fullName: user.full_name, username: user.username, role: user.role, plainPassword });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 7. MAHALLA -> UY -> XONA MA'LUMOTLARI
 // ==========================================
 app.get('/api/center/data', authenticate, checkConfig, async (req, res) => {
   try {
@@ -357,6 +452,7 @@ app.get('/api/center/data', authenticate, checkConfig, async (req, res) => {
       supabase.from('attendance').select('*').order('attendance_date', { ascending: false })
     ]);
 
+    const centerOwners = (users || []).filter(u => u.role === 'center_owner');
     const teachers = (users || []).filter(u => u.role === 'teacher');
     const students = (users || []).filter(u => u.role === 'student');
     const teacherMap = Object.fromEntries(teachers.map(t => [t.id, t]));
@@ -365,7 +461,6 @@ app.get('/api/center/data', authenticate, checkConfig, async (req, res) => {
     const enrichedGroups = (groups || []).map(g => {
       const grpStudents = students.filter(s => s.group_id === g.id);
       const grpTodayAtt = todayAttendance.filter(a => a.group_id === g.id);
-      // Agar guruhda o'quvchilar bo'lsa va bugun davomat olinmagan bo'lsa -> QIZIL ogohlantirish
       const isAttendanceMissing = grpStudents.length > 0 && grpTodayAtt.length === 0;
 
       return {
@@ -392,19 +487,15 @@ app.get('/api/center/data', authenticate, checkConfig, async (req, res) => {
       };
     });
 
-    const enrichedTeachers = teachers.map(t => {
-      const assignedGroups = enrichedGroups.filter(
-        g => g.teacher_id === t.id || g.substitute_teacher_id === t.id
-      );
-      return {
-        ...t,
-        assignedGroups
-      };
-    });
+    const enrichedTeachers = teachers.map(t => ({
+      ...t,
+      assignedGroups: enrichedGroups.filter(g => g.teacher_id === t.id || g.substitute_teacher_id === t.id)
+    }));
 
     res.json({
       branches: branches || [],
       groups: enrichedGroups,
+      centerOwners,
       teachers: enrichedTeachers,
       students: enrichedStudents,
       attendance: attendance || []
@@ -414,7 +505,7 @@ app.get('/api/center/data', authenticate, checkConfig, async (req, res) => {
   }
 });
 
-// Filial qo'shish (Mahalla)
+// Filial qo'shish / o'chirish
 app.post('/api/branches', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   const { name, address } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Filial nomi shart' });
@@ -432,14 +523,13 @@ app.post('/api/branches', authenticate, requireAdminOrOwner, checkConfig, async 
   res.json(data);
 });
 
-// Filialni o'chirish
 app.delete('/api/branches/:id', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   const { error } = await supabase.from('branches').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
 
-// Guruh ochish (Faqat Admin va O'quv markaz egasi - O'qituvchi ocha olmaydi!)
+// Guruh ochish / o'chirish / o'qituvchi almashtirish
 app.post('/api/groups', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   const { branchId, name, price, lessonDays, lessonTime, teacherId } = req.body;
   if (!branchId || !name?.trim() || !teacherId) {
@@ -462,14 +552,12 @@ app.post('/api/groups', authenticate, requireAdminOrOwner, checkConfig, async (r
   res.json(data);
 });
 
-// Guruhni o'chirish
 app.delete('/api/groups/:id', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   const { error } = await supabase.from('groups').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
 
-// O'qituvchini vaqtincha boshqa guruhga ulash / almashtirish
 app.put('/api/groups/:id/substitute', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   const { substituteTeacherId } = req.body;
   const { error } = await supabase
@@ -480,13 +568,10 @@ app.put('/api/groups/:id/substitute', authenticate, requireAdminOrOwner, checkCo
   res.json({ ok: true });
 });
 
-// O'quvchini guruhga yozish / To'lov sanasi va ota-ona Telegram ID belgilash
+// O'quvchini guruhga yozish / transfer / to'lov / o'chirish
 app.put('/api/students/:id/enroll', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   const { groupId, paymentDueDate, parentTelegramChatId } = req.body;
-  const updatePayload = {
-    group_id: groupId || null,
-    is_paid: false
-  };
+  const updatePayload = { group_id: groupId || null, is_paid: false };
   if (paymentDueDate) updatePayload.payment_due_date = paymentDueDate;
   if (parentTelegramChatId !== undefined) {
     updatePayload.parent_telegram_chat_id = String(parentTelegramChatId).trim() || null;
@@ -497,7 +582,6 @@ app.put('/api/students/:id/enroll', authenticate, requireAdminOrOwner, checkConf
   res.json({ ok: true });
 });
 
-// O'quvchini boshqa guruhga transfer qilish
 app.put('/api/students/:id/transfer', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   const { newGroupId } = req.body;
   const { error } = await supabase
@@ -509,7 +593,6 @@ app.put('/api/students/:id/transfer', authenticate, requireAdminOrOwner, checkCo
   res.json({ ok: true });
 });
 
-// To'lov qildi tick (Keyingi sanani +30 kunga suradi va is_paid = true qiladi)
 app.put('/api/students/:id/pay', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   const { nextPaymentDate } = req.body;
   const nextDate = nextPaymentDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
@@ -523,7 +606,6 @@ app.put('/api/students/:id/pay', authenticate, requireAdminOrOwner, checkConfig,
   res.json({ ok: true });
 });
 
-// To'lov sanasini qo'lda tahrirlash (Sariq/Qizil test va boshqaruv uchun)
 app.put('/api/students/:id/payment-date', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   const { paymentDueDate, isPaid } = req.body;
   const { error } = await supabase
@@ -535,7 +617,6 @@ app.put('/api/students/:id/payment-date', authenticate, requireAdminOrOwner, che
   res.json({ ok: true });
 });
 
-// O'qituvchi yoki o'quvchini tizimdan o'chirish
 app.delete('/api/users/:id', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   const { error } = await supabase.from('users').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
@@ -543,7 +624,7 @@ app.delete('/api/users/:id', authenticate, requireAdminOrOwner, checkConfig, asy
 });
 
 // ==========================================
-// 6. DAVOMAT VA TELEGRAM BOT XABARLARI
+// 8. DAVOMAT VA TELEGRAM BOT
 // ==========================================
 app.post('/api/attendance', authenticate, checkConfig, async (req, res) => {
   try {
@@ -565,7 +646,6 @@ app.post('/api/attendance', authenticate, checkConfig, async (req, res) => {
 
     if (error) throw error;
 
-    // Agar o'quvchi kelmasa (status === false) -> ota-onasi Telegramiga xabar yuborish
     let telegramSent = false;
     if (status === false) {
       const [{ data: student }, { data: group }] = await Promise.all([
@@ -588,16 +668,14 @@ app.post('/api/attendance', authenticate, checkConfig, async (req, res) => {
   }
 });
 
-// Qizil to'lovlarni qo'lda tekshirish tugmasi
 app.post('/api/trigger-payment-check', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
   const count = await checkAndNotifyOverduePayments();
   res.json({ message: `Tekshiruv yakunlandi. ${count} ta ota-onaga Telegram xabar yuborildi.` });
 });
 
 // ==========================================
-// 7. OLDINGI AI DARSLAR, TESTLAR VA TRACKER (SAQLANGAN!)
+// 9. AI LESSONS & QUIZ
 // ==========================================
-// Eslatma: O'qituvchining guruhga AI uyga vazifa yuborishi (groupId) olib tashlandi!
 app.post('/api/lessons/generate', aiLimiter, authenticate, checkConfig, upload.single('file'), async (req, res) => {
   try {
     if (!ai) return res.status(500).json({ error: 'GEMINI_API_KEY kiritilmagan!' });
@@ -609,9 +687,7 @@ app.post('/api/lessons/generate', aiLimiter, authenticate, checkConfig, upload.s
 
     const contents = [];
     if (req.file) {
-      contents.push({
-        inlineData: { data: req.file.buffer.toString('base64'), mimeType: req.file.mimetype }
-      });
+      contents.push({ inlineData: { data: req.file.buffer.toString('base64'), mimeType: req.file.mimetype } });
     }
     if (text && String(text).trim()) {
       contents.push(`Asosiy matn:\n${String(text).trim().slice(0, 30000)}`);
@@ -676,7 +752,7 @@ FAQAT "${language}" tilida ta'limiy paket yarat: title, summary (5-7 ta), flashc
       .from('lessons')
       .insert({
         creator_id: req.user.id !== 'super_admin' ? req.user.id : null,
-        group_id: null, // Guruhga uyga vazifa yuborish olib tashlangan
+        group_id: null,
         title: title?.trim().slice(0, 200) || parsed.title,
         summary: parsed.summary,
         flashcards: enrichedFlashcards,
@@ -727,7 +803,7 @@ app.post('/api/quiz/submit', authenticate, checkConfig, async (req, res) => {
 });
 
 // ==========================================
-// 8. STATIC BUILD & SERVER START
+// 10. STATIC BUILD & SERVER START
 // ==========================================
 const clientDistPath = path.join(__dirname, '../eduai-client/dist');
 if (fs.existsSync(clientDistPath)) {
