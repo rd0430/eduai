@@ -25,24 +25,18 @@ export default function App() {
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const googleBtnRef = useRef(null);
 
-  // Tizim ma'lumotlari
   const [data, setData] = useState({
     branches: [], groups: [], centerOwners: [], teachers: [], students: [], attendance: []
   });
 
-  // Filiallar -> Guruhlar -> O'quvchilar navigatsiyasi
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [ownerTab, setOwnerTab] = useState('branches'); // 'branches' | 'accounts' | 'owners'
 
-  // Yangi yaratilgan Login-Parolni ko'rsatuvchi karta
   const [createdCredentials, setCreatedCredentials] = useState(null);
   const [copied, setCopied] = useState(false);
-
-  // Student va Teacher tablar
   const [activeTab, setActiveTab] = useState('main');
 
-  // Formalar
   const [newOwnerForm, setNewOwnerForm] = useState({ fullName: '', centerName: '' });
   const [newTeacherForm, setNewTeacherForm] = useState({ fullName: '', subject: '' });
   const [newStudentForm, setNewStudentForm] = useState({
@@ -58,13 +52,13 @@ export default function App() {
   });
 
   useEffect(() => {
-    if (darkMode) document.documentElement.classList.add('dark');
-    else document.documentElement.classList.remove('dark');
+    const root = document.documentElement;
+    if (darkMode) root.classList.add('dark');
+    else root.classList.remove('dark');
   }, [darkMode]);
 
   const authHeaders = { headers: { Authorization: `Bearer ${token}` } };
 
-  // Google Gmail Admin tugmasini yuklash
   useEffect(() => {
     if (currentUser) return;
     let cancelled = false;
@@ -101,7 +95,7 @@ export default function App() {
             window.google.accounts.id.renderButton(googleBtnRef.current, {
               theme: 'outline',
               size: 'large',
-              width: '320',
+              width: '280',
               text: 'signin_with'
             });
           } else if (!cancelled) {
@@ -157,7 +151,7 @@ export default function App() {
   };
 
   // ==========================================
-  // 1. LOGIN OYNASI
+  // 1. LOGIN OYNASI (MOBILGA MOS VA TOZA OQ)
   // ==========================================
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -176,14 +170,14 @@ export default function App() {
 
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-white text-slate-900 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-8 shadow-xl">
-          <div className="text-center mb-7">
+      <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xl">
+          <div className="text-center mb-6">
             <div className="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-3 font-extrabold text-xl shadow-md">
               E
             </div>
             <h1 className="text-2xl font-extrabold text-slate-900">EduAI Platform</h1>
-            <p className="text-slate-500 text-sm mt-1">
+            <p className="text-slate-500 text-xs sm:text-sm mt-1">
               O'quv markazi, O'qituvchi va O'quvchilar kirish oynasi
             </p>
           </div>
@@ -221,11 +215,11 @@ export default function App() {
             </button>
           </form>
 
-          <div className="mt-7 pt-6 border-t border-slate-200 text-center">
-            <p className="text-xs font-medium text-slate-400 mb-3 flex items-center justify-center gap-1.5">
+          <div className="mt-6 pt-5 border-t border-slate-200 text-center">
+            <p className="text-xs font-medium text-slate-500 mb-3 flex items-center justify-center gap-1.5">
               <ShieldCheck size={15} className="text-blue-600" /> Bosh Admin (Gmail orqali kirish)
             </p>
-            <div ref={googleBtnRef} className="flex justify-center min-h-[42px]" />
+            <div ref={googleBtnRef} className="flex justify-center min-h-[42px] overflow-hidden" />
           </div>
         </div>
       </div>
@@ -240,36 +234,35 @@ export default function App() {
       red: 'bg-rose-50 text-rose-700 border-rose-200'
     };
     return (
-      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${colors[status.color] || colors.green}`}>
+      <span className={`inline-block whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-semibold border ${colors[status.color] || colors.green}`}>
         {status.label}
       </span>
     );
   };
 
   // ==========================================
-  // CHAP TOMONDA FIXED SIDEBAR LAYOUT WRAPPER
+  // CHAP TOMONDA FIXED SIDEBAR + RESPONSIVE MOBILE DRAWER
   // ==========================================
   const renderSidebarLayout = (navItems, roleSubtitle, children) => (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex">
-      {/* Mobil fon */}
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col lg:flex-row">
+      {/* Mobil qora fon */}
       {mobileMenuOpen && (
         <div
           onClick={() => setMobileMenuOpen(false)}
-          className="fixed inset-0 bg-black/40 z-30 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
         />
       )}
 
       {/* CHAP TOMONDA FIXED SIDEBAR */}
       <aside
-        className={`fixed top-0 left-0 z-40 h-screen w-64 bg-white border-r border-slate-200 flex flex-col justify-between transition-transform duration-200 ${
+        className={`fixed top-0 left-0 z-40 h-screen w-64 bg-white border-r border-slate-200 flex flex-col justify-between transition-transform duration-200 shadow-lg lg:shadow-none ${
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        <div>
-          {/* Logo va foydalanuvchi */}
-          <div className="p-5 border-b border-slate-200 flex items-center justify-between">
+        <div className="overflow-y-auto">
+          <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-blue-600 text-white rounded-xl flex items-center justify-center font-extrabold text-lg">
+              <div className="w-9 h-9 bg-blue-600 text-white rounded-xl flex items-center justify-center font-extrabold text-lg shrink-0">
                 E
               </div>
               <div>
@@ -285,14 +278,12 @@ export default function App() {
             </button>
           </div>
 
-          {/* Foydalanuvchi profili */}
-          <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/70">
+          <div className="px-4 sm:px-5 py-3.5 border-b border-slate-200 bg-slate-50">
             <div className="font-bold text-sm text-slate-900 truncate">{currentUser.fullName}</div>
             <div className="text-xs text-slate-500 truncate">@{currentUser.username}</div>
           </div>
 
-          {/* Bo'limlar ro'yxati */}
-          <nav className="p-3 space-y-1">
+          <nav className="p-3 space-y-1.5">
             {navItems.map((item, idx) => {
               const Icon = item.icon;
               return (
@@ -306,7 +297,7 @@ export default function App() {
                     item.active
                       ? 'bg-blue-600 text-white shadow-sm'
                       : item.variant === 'warning'
-                      ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                      ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
                       : 'text-slate-700 hover:bg-slate-100'
                   }`}
                 >
@@ -318,8 +309,7 @@ export default function App() {
           </nav>
         </div>
 
-        {/* Pastki boshqaruv tugmalari (Kun/Tun rejimi + Chiqish) */}
-        <div className="p-3 border-t border-slate-200 space-y-1.5">
+        <div className="p-3 border-t border-slate-200 space-y-1.5 bg-white">
           <button
             onClick={() => setDarkMode(!darkMode)}
             className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
@@ -338,21 +328,30 @@ export default function App() {
         </div>
       </aside>
 
-      {/* O'NG TOMON ASOSIY KONTENT (lg:ml-64 fixed sidebar uchun joy) */}
-      <div className="flex-1 lg:ml-64 min-w-0">
+      {/* O'NG TOMON ASOSIY KONTENT */}
+      <div className="flex-1 lg:ml-64 min-w-0 flex flex-col">
         {/* Mobil tepa bar */}
-        <div className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20">
+        <header className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-xs">
           <button
             onClick={() => setMobileMenuOpen(true)}
             className="p-2 rounded-xl bg-slate-100 text-slate-700"
+            aria-label="Menyu"
           >
             <Menu size={20} />
           </button>
-          <span className="font-bold text-slate-900">EduAI</span>
-          <div className="w-9" />
-        </div>
+          <div className="text-center">
+            <span className="font-extrabold text-slate-900 block leading-none">EduAI</span>
+            <span className="text-[10px] text-slate-500">{roleSubtitle}</span>
+          </div>
+          <button
+            onClick={() => setDarkMode(!darkMode)}
+            className="p-2 rounded-xl bg-slate-100 text-slate-700"
+          >
+            {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+        </header>
 
-        <main className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
+        <main className="p-3.5 sm:p-6 max-w-6xl w-full mx-auto space-y-5">
           {children}
         </main>
       </div>
@@ -386,38 +385,38 @@ export default function App() {
       <>
         {activeTab === 'main' ? (
           <>
-            <section className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-              <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-blue-600">
+            <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm">
+              <h2 className="text-base sm:text-lg font-bold mb-4 flex items-center gap-2 text-blue-600">
                 <CreditCard size={20} /> Kunlik Davomat va To'lov Holati
               </h2>
 
               {!myGroup ? (
-                <p className="text-slate-500">Siz hali birorta guruhga biriktirilmagansiz. O'quv markaz ma'muriyatiga murojaat qiling.</p>
+                <p className="text-sm text-slate-500">Siz hali birorta guruhga biriktirilmagansiz. O'quv markaz ma'muriyatiga murojaat qiling.</p>
               ) : (
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-3">
-                    <div className="flex justify-between items-start">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                  <div className="bg-slate-50 border border-slate-200 p-4 sm:p-5 rounded-2xl space-y-3">
+                    <div className="flex flex-wrap justify-between items-start gap-2">
                       <div>
                         <span className="text-xs text-slate-500">Guruhingiz</span>
-                        <h3 className="text-xl font-bold text-slate-900">{myGroup.name}</h3>
+                        <h3 className="text-lg sm:text-xl font-bold text-slate-900">{myGroup.name}</h3>
                       </div>
                       {renderPaymentBadge(myInfo?.paymentStatus)}
                     </div>
 
-                    <div className="pt-3 border-t border-slate-200 flex justify-between items-center">
-                      <span className="text-sm text-slate-600">Oylik kurs narxi:</span>
-                      <span className="text-lg font-extrabold text-emerald-600">
+                    <div className="pt-3 border-t border-slate-200 flex justify-between items-center text-sm">
+                      <span className="text-slate-600">Oylik kurs narxi:</span>
+                      <span className="text-base sm:text-lg font-extrabold text-emerald-600">
                         {Number(myGroup.price).toLocaleString()} so'm
                       </span>
                     </div>
 
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-slate-600">Keyingi to'lov sanasi:</span>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-slate-600">Keyingi to'lov sanasi:</span>
                       <span className="font-mono font-bold text-slate-900">{myInfo?.payment_due_date || 'Belgilanmagan'}</span>
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl flex flex-col justify-between">
+                  <div className="bg-slate-50 border border-slate-200 p-4 sm:p-5 rounded-2xl flex flex-col justify-between gap-4">
                     <div>
                       <span className="text-xs text-slate-500">Dars jadvali</span>
                       <p className="text-sm font-medium text-slate-700 mt-1">
@@ -425,20 +424,20 @@ export default function App() {
                       </p>
                     </div>
 
-                    <div className="my-4 flex items-center justify-between bg-white border border-slate-200 p-4 rounded-xl">
-                      <span className="font-semibold text-slate-700">Bugungi davomat:</span>
+                    <div className="flex items-center justify-between bg-white border border-slate-200 p-3.5 sm:p-4 rounded-xl">
+                      <span className="font-semibold text-sm text-slate-700">Bugungi davomat:</span>
                       {myInfo?.todayAttendance === true && (
-                        <span className="flex items-center gap-1.5 text-emerald-600 font-bold">
-                          <CheckCircle2 size={22} /> Keldi
+                        <span className="flex items-center gap-1.5 text-emerald-600 font-bold text-sm">
+                          <CheckCircle2 size={20} /> Keldi
                         </span>
                       )}
                       {myInfo?.todayAttendance === false && (
-                        <span className="flex items-center gap-1.5 text-rose-600 font-bold">
-                          <XCircle size={22} /> Kelmadi
+                        <span className="flex items-center gap-1.5 text-rose-600 font-bold text-sm">
+                          <XCircle size={20} /> Kelmadi
                         </span>
                       )}
                       {myInfo?.todayAttendance === null && (
-                        <span className="text-slate-400 text-sm">Hali belgilanmagan</span>
+                        <span className="text-slate-400 text-xs sm:text-sm">Hali belgilanmagan</span>
                       )}
                     </div>
                   </div>
@@ -446,8 +445,8 @@ export default function App() {
               )}
             </section>
 
-            <section className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-              <h3 className="font-bold text-slate-900 mb-4">Kundalik davomat tarixi</h3>
+            <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm">
+              <h3 className="font-bold text-slate-900 mb-4 text-base">Kundalik davomat tarixi</h3>
               {myAttendance.length === 0 ? (
                 <p className="text-sm text-slate-500">Hozircha davomat yozuvlari yo'q.</p>
               ) : (
@@ -510,7 +509,7 @@ export default function App() {
         {activeTab === 'tools' ? (
           <StudyTools />
         ) : myGroups.length === 0 ? (
-          <div className="bg-white border border-slate-200 p-8 rounded-2xl text-center text-slate-500">
+          <div className="bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl text-center text-sm text-slate-500">
             Sizga hali guruh biriktirilmagan. O'quv markaz egasi guruh ochib sizni biriktirishi kerak.
           </div>
         ) : (
@@ -521,14 +520,14 @@ export default function App() {
             return (
               <div
                 key={group.id}
-                className={`bg-white border rounded-2xl p-6 shadow-sm ${
+                className={`bg-white border rounded-2xl p-4 sm:p-6 shadow-sm ${
                   group.isAttendanceMissing ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200'
                 }`}
               >
-                <div className="flex flex-wrap justify-between items-center gap-4 mb-6 pb-4 border-b border-slate-200">
+                <div className="flex flex-wrap justify-between items-center gap-3 mb-5 pb-4 border-b border-slate-200">
                   <div>
-                    <div className="flex items-center gap-3">
-                      <h2 className="text-xl font-bold text-slate-900">{group.name}</h2>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-lg sm:text-xl font-bold text-slate-900">{group.name}</h2>
                       {isSub && (
                         <span className="bg-purple-100 text-purple-700 text-xs px-2.5 py-1 rounded-full font-semibold">
                           Vaqtincha almashtirish
@@ -540,29 +539,29 @@ export default function App() {
                         </span>
                       )}
                     </div>
-                    <p className="text-slate-500 text-sm mt-1">
+                    <p className="text-slate-500 text-xs sm:text-sm mt-1">
                       Kunlar: {group.lesson_days} | Vaqt: {group.lesson_time} | O'quvchilar: {group.studentCount} ta
                     </p>
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
+                <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                  <table className="w-full min-w-[540px] text-left text-sm">
                     <thead className="text-slate-500 border-b border-slate-200">
                       <tr>
                         <th className="pb-3">O'quvchi</th>
                         <th className="pb-3">To'lov holati</th>
                         <th className="pb-3">To'lov sanasi</th>
-                        <th className="pb-3 text-right">Davomat (Keldi / Kelmadi)</th>
+                        <th className="pb-3 text-right">Davomat</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                       {groupStudents.map(st => (
                         <tr key={st.id}>
-                          <td className="py-4 font-semibold text-slate-900">{st.full_name}</td>
-                          <td className="py-4">{renderPaymentBadge(st.paymentStatus)}</td>
-                          <td className="py-4 font-mono text-slate-600">{st.payment_due_date || '-'}</td>
-                          <td className="py-4 text-right space-x-2">
+                          <td className="py-3.5 font-semibold text-slate-900">{st.full_name}</td>
+                          <td className="py-3.5">{renderPaymentBadge(st.paymentStatus)}</td>
+                          <td className="py-3.5 font-mono text-xs sm:text-sm text-slate-600">{st.payment_due_date || '-'}</td>
+                          <td className="py-3.5 text-right space-x-2 whitespace-nowrap">
                             <button
                               onClick={() => markAttendance(group.id, st.id, true)}
                               className={`p-2 rounded-xl border transition ${
@@ -572,7 +571,7 @@ export default function App() {
                               }`}
                               title="Keldi (Yashil tick)"
                             >
-                              <CheckCircle2 size={20} />
+                              <CheckCircle2 size={18} />
                             </button>
                             <button
                               onClick={() => markAttendance(group.id, st.id, false)}
@@ -583,7 +582,7 @@ export default function App() {
                               }`}
                               title="Kelmadi (Qizil X — Ota-onaga Telegram xabar ketadi)"
                             >
-                              <XCircle size={20} />
+                              <XCircle size={18} />
                             </button>
                           </td>
                         </tr>
@@ -604,31 +603,47 @@ export default function App() {
   // ==========================================
   const handleCreateCenterOwner = async (e) => {
     e.preventDefault();
-    const res = await axios.post(`${API}/admin/center-owners`, newOwnerForm, authHeaders);
-    setCreatedCredentials({ ...res.data, roleLabel: "O'quv markaz egasi" });
-    setNewOwnerForm({ fullName: '', centerName: '' });
-    fetchData();
+    try {
+      const res = await axios.post(`${API}/admin/center-owners`, newOwnerForm, authHeaders);
+      setCreatedCredentials({ ...res.data, roleLabel: "O'quv markaz egasi" });
+      setNewOwnerForm({ fullName: '', centerName: '' });
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Markaz egasi yaratishda xatolik yuz berdi!');
+    }
   };
 
   const handleCreateTeacher = async (e) => {
     e.preventDefault();
-    const res = await axios.post(`${API}/owner/teachers`, newTeacherForm, authHeaders);
-    setCreatedCredentials({ ...res.data, roleLabel: "O'qituvchi" });
-    setNewTeacherForm({ fullName: '', subject: '' });
-    fetchData();
+    try {
+      const res = await axios.post(`${API}/owner/teachers`, newTeacherForm, authHeaders);
+      setCreatedCredentials({ ...res.data, roleLabel: "O'qituvchi" });
+      setNewTeacherForm({ fullName: '', subject: '' });
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.error || "O'qituvchi yaratishda xatolik yuz berdi!");
+    }
   };
 
   const handleCreateStudent = async (e) => {
     e.preventDefault();
-    const res = await axios.post(`${API}/owner/students`, newStudentForm, authHeaders);
-    setCreatedCredentials({ ...res.data, roleLabel: "O'quvchi" });
-    setNewStudentForm({ fullName: '', groupId: '', paymentDueDate: '', parentTelegramChatId: '' });
-    fetchData();
+    try {
+      const res = await axios.post(`${API}/owner/students`, newStudentForm, authHeaders);
+      setCreatedCredentials({ ...res.data, roleLabel: "O'quvchi" });
+      setNewStudentForm({ fullName: '', groupId: '', paymentDueDate: '', parentTelegramChatId: '' });
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.error || "O'quvchi yaratishda xatolik yuz berdi!");
+    }
   };
 
   const handleResetPassword = async (userId) => {
-    const res = await axios.post(`${API}/users/${userId}/reset-password`, {}, authHeaders);
-    setCreatedCredentials({ ...res.data, roleLabel: 'Yangi parol' });
+    try {
+      const res = await axios.post(`${API}/users/${userId}/reset-password`, {}, authHeaders);
+      setCreatedCredentials({ ...res.data, roleLabel: 'Yangi parol' });
+    } catch (err) {
+      alert(err.response?.data?.error || 'Parol yangilashda xatolik!');
+    }
   };
 
   const handleAddBranch = async (e) => {
@@ -697,9 +712,8 @@ export default function App() {
 
   return renderSidebarLayout(adminNav, roleTitle, (
     <>
-      {/* Navigatsiya yo'li (Filiallar -> Guruhlar -> O'quvchilar) */}
       {ownerTab === 'branches' && (
-        <div className="bg-white border border-slate-200 rounded-2xl px-5 py-3.5 flex items-center gap-2 text-sm text-slate-500 shadow-sm">
+        <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3 flex flex-wrap items-center gap-2 text-xs sm:text-sm text-slate-500 shadow-sm">
           <button
             onClick={() => { setSelectedBranch(null); setSelectedGroup(null); }}
             className="hover:text-blue-600 flex items-center gap-1.5 font-semibold text-slate-800"
@@ -708,7 +722,7 @@ export default function App() {
           </button>
           {selectedBranch && (
             <>
-              <ChevronRight size={15} />
+              <ChevronRight size={14} />
               <button onClick={() => setSelectedGroup(null)} className="hover:text-blue-600 font-semibold text-slate-800">
                 {selectedBranch.name} (Guruhlar)
               </button>
@@ -716,42 +730,36 @@ export default function App() {
           )}
           {selectedGroup && (
             <>
-              <ChevronRight size={15} />
+              <ChevronRight size={14} />
               <span className="text-blue-600 font-bold">{selectedGroup.name} (O'quvchilar)</span>
             </>
           )}
         </div>
       )}
 
-      {/* YANGI YARATILGAN LOGIN VA PAROL KARTASI */}
       {createdCredentials && (
-        <div className="bg-emerald-50 border-2 border-emerald-400 rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+        <div className="bg-emerald-50 border-2 border-emerald-400 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
           <div className="space-y-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 block">
               {createdCredentials.roleLabel} uchun kirish ma'lumotlari tayyor!
             </span>
-            <div className="text-sm sm:text-base text-slate-900">
-              Ism: <b>{createdCredentials.fullName}</b> | Login:{' '}
-              <code className="bg-white px-2 py-0.5 rounded border font-bold text-blue-700">
-                {createdCredentials.username}
-              </code>{' '}
-              | Parol:{' '}
-              <code className="bg-white px-2 py-0.5 rounded border font-bold text-emerald-700">
-                {createdCredentials.plainPassword}
-              </code>
+            <div className="text-sm text-slate-900 flex flex-wrap items-center gap-2">
+              <span>Ism: <b>{createdCredentials.fullName}</b></span>
+              <span>Login: <code className="bg-white px-2 py-0.5 rounded border font-bold text-blue-700">{createdCredentials.username}</code></span>
+              <span>Parol: <code className="bg-white px-2 py-0.5 rounded border font-bold text-emerald-700">{createdCredentials.plainPassword}</code></span>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => copyCredentials(createdCredentials)}
-              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold"
             >
               {copied ? <Check size={16} /> : <Copy size={16} />}
               {copied ? 'Nusxalandi!' : 'Nusxalash'}
             </button>
             <button
               onClick={() => setCreatedCredentials(null)}
-              className="text-slate-500 hover:text-slate-800 px-2 py-1 text-sm"
+              className="text-slate-500 hover:text-slate-800 px-3 py-2 text-sm"
             >
               Yopish
             </button>
@@ -759,15 +767,15 @@ export default function App() {
         </div>
       )}
 
-      {/* SUPER ADMIN (GMAIL) UCHUN: O'QUV MARKAZ EGALARI YARATISH */}
+      {/* SUPER ADMIN (GMAIL): MARKAZ EGALARI */}
       {ownerTab === 'owners' && currentUser.role === 'admin' && (
-        <div className="space-y-6">
-          <form onSubmit={handleCreateCenterOwner} className="bg-white border border-slate-200 p-5 rounded-2xl flex flex-wrap gap-3 shadow-sm">
+        <div className="space-y-5">
+          <form onSubmit={handleCreateCenterOwner} className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-3 shadow-sm">
             <input
               type="text"
               placeholder="O'quv markaz egasining Ism Familiyasi"
               required
-              className="flex-1 bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
               value={newOwnerForm.fullName}
               onChange={e => setNewOwnerForm({ ...newOwnerForm, fullName: e.target.value })}
             />
@@ -775,32 +783,32 @@ export default function App() {
               type="text"
               placeholder="O'quv markaz nomi"
               required
-              className="flex-1 bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
               value={newOwnerForm.centerName}
               onChange={e => setNewOwnerForm({ ...newOwnerForm, centerName: e.target.value })}
             />
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2">
+            <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2">
               <Plus size={16} /> Center Owner Login-Parol yaratish
             </button>
           </form>
 
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-            <h2 className="text-lg font-bold mb-4">Ro'yxatdagi O'quv Markaz Egalari</h2>
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm">
+            <h2 className="text-base sm:text-lg font-bold mb-4">Ro'yxatdagi O'quv Markaz Egalari</h2>
             {data.centerOwners.length === 0 ? (
               <p className="text-sm text-slate-500">Hozircha o'quv markaz egalari yaratilmagan.</p>
             ) : (
-              <div className="grid md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {data.centerOwners.map(o => (
-                  <div key={o.id} className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex justify-between items-start">
-                    <div>
-                      <h3 className="font-bold text-slate-900">{o.full_name}</h3>
-                      <p className="text-xs text-blue-600 font-medium">{o.subject}</p>
-                      <p className="text-xs font-mono text-slate-500 mt-1">Login: {o.username}</p>
+                  <div key={o.id} className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex justify-between items-start gap-2">
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-slate-900 truncate">{o.full_name}</h3>
+                      <p className="text-xs text-blue-600 font-medium truncate">{o.subject}</p>
+                      <p className="text-xs font-mono text-slate-500 mt-1 truncate">Login: {o.username}</p>
                     </div>
-                    <div className="flex gap-1.5">
+                    <div className="flex gap-1.5 shrink-0">
                       <button
                         onClick={() => handleResetPassword(o.id)}
-                        className="p-1.5 bg-white border border-slate-200 rounded-lg text-amber-600 hover:bg-amber-50"
+                        className="p-2 bg-white border border-slate-200 rounded-lg text-amber-600 hover:bg-amber-50"
                         title="Yangi parol berish"
                       >
                         <KeyRound size={15} />
@@ -811,7 +819,7 @@ export default function App() {
                           await axios.delete(`${API}/users/${o.id}`, authHeaders);
                           fetchData();
                         }}
-                        className="p-1.5 bg-white border border-slate-200 rounded-lg text-rose-600 hover:bg-rose-50"
+                        className="p-2 bg-white border border-slate-200 rounded-lg text-rose-600 hover:bg-rose-50"
                       >
                         <Trash2 size={15} />
                       </button>
@@ -824,11 +832,11 @@ export default function App() {
         </div>
       )}
 
-      {/* CENTER OWNER: O'QITUVCHI VA O'QUVCHILARGA LOGIN-PAROL BERISH */}
+      {/* O'QITUVCHI VA O'QUVCHILAR LOGIN-PAROL YARATISH */}
       {ownerTab === 'accounts' && (
-        <div className="grid lg:grid-cols-2 gap-6">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-5 shadow-sm">
-            <h2 className="text-lg font-bold text-slate-900">1. O'qituvchiga Login va Parol berish</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-5 shadow-sm">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900">1. O'qituvchiga Login va Parol berish</h2>
             <form onSubmit={handleCreateTeacher} className="space-y-3">
               <input
                 type="text"
@@ -853,9 +861,9 @@ export default function App() {
 
             <div className="space-y-2.5 pt-2 border-t border-slate-200">
               {data.teachers.map(t => (
-                <div key={t.id} className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex justify-between items-start">
-                  <div>
-                    <div className="font-bold text-slate-900">{t.full_name}</div>
+                <div key={t.id} className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex justify-between items-start gap-2">
+                  <div className="min-w-0">
+                    <div className="font-bold text-slate-900 truncate">{t.full_name}</div>
                     <div className="text-xs text-slate-500">
                       {t.subject} | Login: <b className="text-blue-600">{t.username}</b>
                     </div>
@@ -866,10 +874,10 @@ export default function App() {
                         : 'Biriktirilmagan'}
                     </div>
                   </div>
-                  <div className="flex gap-1.5">
+                  <div className="flex gap-1.5 shrink-0">
                     <button
                       onClick={() => handleResetPassword(t.id)}
-                      className="p-1.5 bg-white border border-slate-200 rounded-lg text-amber-600 hover:bg-amber-50"
+                      className="p-2 bg-white border border-slate-200 rounded-lg text-amber-600 hover:bg-amber-50"
                       title="Parolni yangilash"
                     >
                       <KeyRound size={15} />
@@ -880,7 +888,7 @@ export default function App() {
                         await axios.delete(`${API}/users/${t.id}`, authHeaders);
                         fetchData();
                       }}
-                      className="p-1.5 bg-white border border-slate-200 rounded-lg text-rose-600 hover:bg-rose-50"
+                      className="p-2 bg-white border border-slate-200 rounded-lg text-rose-600 hover:bg-rose-50"
                     >
                       <Trash2 size={15} />
                     </button>
@@ -890,8 +898,8 @@ export default function App() {
             </div>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-5 shadow-sm">
-            <h2 className="text-lg font-bold text-slate-900">2. O'quvchiga Login va Parol berish</h2>
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-5 shadow-sm">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900">2. O'quvchiga Login va Parol berish</h2>
             <form onSubmit={handleCreateStudent} className="space-y-3">
               <input
                 type="text"
@@ -901,9 +909,9 @@ export default function App() {
                 value={newStudentForm.fullName}
                 onChange={e => setNewStudentForm({ ...newStudentForm, fullName: e.target.value })}
               />
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <select
-                  className="bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
                   value={newStudentForm.groupId}
                   onChange={e => setNewStudentForm({ ...newStudentForm, groupId: e.target.value })}
                 >
@@ -914,7 +922,7 @@ export default function App() {
                 </select>
                 <input
                   type="date"
-                  className="bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
                   value={newStudentForm.paymentDueDate}
                   onChange={e => setNewStudentForm({ ...newStudentForm, paymentDueDate: e.target.value })}
                 />
@@ -933,18 +941,18 @@ export default function App() {
 
             <div className="space-y-2.5 pt-2 border-t border-slate-200 max-h-[420px] overflow-y-auto">
               {data.students.map(st => (
-                <div key={st.id} className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex justify-between items-center">
-                  <div>
-                    <div className="font-bold text-slate-900">{st.full_name}</div>
+                <div key={st.id} className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex flex-wrap justify-between items-center gap-2">
+                  <div className="min-w-0">
+                    <div className="font-bold text-slate-900 truncate">{st.full_name}</div>
                     <div className="text-xs text-slate-500">
                       Guruh: <b>{st.groupName}</b> | Login: <b className="text-emerald-600">{st.username}</b>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     {renderPaymentBadge(st.paymentStatus)}
                     <button
                       onClick={() => handleResetPassword(st.id)}
-                      className="p-1.5 bg-white border border-slate-200 rounded-lg text-amber-600 hover:bg-amber-50"
+                      className="p-2 bg-white border border-slate-200 rounded-lg text-amber-600 hover:bg-amber-50"
                       title="Parolni yangilash"
                     >
                       <KeyRound size={15} />
@@ -955,7 +963,7 @@ export default function App() {
                         await axios.delete(`${API}/users/${st.id}`, authHeaders);
                         fetchData();
                       }}
-                      className="p-1.5 bg-white border border-slate-200 rounded-lg text-rose-600 hover:bg-rose-50"
+                      className="p-2 bg-white border border-slate-200 rounded-lg text-rose-600 hover:bg-rose-50"
                     >
                       <Trash2 size={15} />
                     </button>
@@ -969,13 +977,13 @@ export default function App() {
 
       {/* 1-DARAJA: FILIALLAR */}
       {ownerTab === 'branches' && !selectedBranch && (
-        <div className="space-y-6">
-          <form onSubmit={handleAddBranch} className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-wrap gap-3 shadow-sm">
+        <div className="space-y-5">
+          <form onSubmit={handleAddBranch} className="bg-white border border-slate-200 p-4 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-3 shadow-sm">
             <input
               type="text"
               placeholder="Yangi filial nomi"
               required
-              className="flex-1 bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
               value={newBranch.name}
               onChange={e => setNewBranch({ ...newBranch, name: e.target.value })}
             />
@@ -983,16 +991,16 @@ export default function App() {
               type="text"
               placeholder="Filial manzili"
               required
-              className="flex-1 bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
               value={newBranch.address}
               onChange={e => setNewBranch({ ...newBranch, address: e.target.value })}
             />
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2">
+            <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2">
               <Plus size={16} /> Filial qo'shish
             </button>
           </form>
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {data.branches.map(branch => {
               const branchGroups = data.groups.filter(g => g.branch_id === branch.id);
               const missingAttCount = branchGroups.filter(g => g.isAttendanceMissing).length;
@@ -1001,13 +1009,13 @@ export default function App() {
                 <div
                   key={branch.id}
                   onClick={() => setSelectedBranch(branch)}
-                  className={`cursor-pointer bg-white border rounded-2xl p-6 hover:border-blue-500 transition shadow-sm ${
+                  className={`cursor-pointer bg-white border rounded-2xl p-5 sm:p-6 hover:border-blue-500 transition shadow-sm ${
                     missingAttCount > 0 ? 'border-rose-400' : 'border-slate-200'
                   }`}
                 >
                   <div className="flex justify-between items-start mb-4">
                     <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
-                      <Building2 size={24} />
+                      <Building2 size={22} />
                     </div>
                     <div className="flex items-center gap-2">
                       {missingAttCount > 0 && (
@@ -1022,13 +1030,13 @@ export default function App() {
                           await axios.delete(`${API}/branches/${branch.id}`, authHeaders);
                           fetchData();
                         }}
-                        className="text-slate-400 hover:text-rose-600 p-1"
+                        className="text-slate-400 hover:text-rose-600 p-1.5"
                       >
                         <Trash2 size={16} />
                       </button>
                     </div>
                   </div>
-                  <h3 className="text-xl font-bold text-slate-900">{branch.name}</h3>
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-900">{branch.name}</h3>
                   <p className="text-slate-500 text-sm mt-1">{branch.address}</p>
                   <div className="mt-4 pt-4 border-t border-slate-200 flex justify-between text-sm">
                     <span>Guruhlar: <b>{branchGroups.length} ta</b></span>
@@ -1043,13 +1051,13 @@ export default function App() {
 
       {/* 2-DARAJA: TANLANGAN FILIALDAGI GURUHLAR */}
       {ownerTab === 'branches' && selectedBranch && !selectedGroup && (
-        <div className="space-y-6">
-          <form onSubmit={handleAddGroup} className="bg-white border border-slate-200 p-5 rounded-2xl grid md:grid-cols-6 gap-3 shadow-sm">
+        <div className="space-y-5">
+          <form onSubmit={handleAddGroup} className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 shadow-sm">
             <input
               type="text"
               placeholder="Guruh nomi"
               required
-              className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm"
+              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
               value={newGroup.name}
               onChange={e => setNewGroup({ ...newGroup, name: e.target.value })}
             />
@@ -1057,7 +1065,7 @@ export default function App() {
               type="number"
               placeholder="To'lov narxi (so'm)"
               required
-              className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm"
+              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
               value={newGroup.price}
               onChange={e => setNewGroup({ ...newGroup, price: e.target.value })}
             />
@@ -1065,7 +1073,7 @@ export default function App() {
               type="text"
               placeholder="Kunlar (Dush, Chor, Jum)"
               required
-              className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm"
+              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
               value={newGroup.lessonDays}
               onChange={e => setNewGroup({ ...newGroup, lessonDays: e.target.value })}
             />
@@ -1073,13 +1081,13 @@ export default function App() {
               type="text"
               placeholder="Vaqti (14:00 - 16:00)"
               required
-              className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm"
+              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
               value={newGroup.lessonTime}
               onChange={e => setNewGroup({ ...newGroup, lessonTime: e.target.value })}
             />
             <select
               required
-              className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm"
+              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
               value={newGroup.teacherId}
               onChange={e => setNewGroup({ ...newGroup, teacherId: e.target.value })}
             >
@@ -1088,26 +1096,26 @@ export default function App() {
                 <option key={t.id} value={t.id}>{t.full_name}</option>
               ))}
             </select>
-            <button className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-1 py-2">
+            <button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-1 py-2.5">
               <Plus size={16} /> Guruh ochish
             </button>
           </form>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {data.groups
               .filter(g => g.branch_id === selectedBranch.id)
               .map(group => (
                 <div
                   key={group.id}
-                  className={`bg-white border rounded-2xl p-6 flex flex-col justify-between transition shadow-sm ${
+                  className={`bg-white border rounded-2xl p-5 sm:p-6 flex flex-col justify-between transition shadow-sm ${
                     group.isAttendanceMissing ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200'
                   }`}
                 >
                   <div>
-                    <div className="flex justify-between items-start">
+                    <div className="flex justify-between items-start gap-2">
                       <h3
                         onClick={() => setSelectedGroup(group)}
-                        className="text-xl font-bold text-slate-900 cursor-pointer hover:text-blue-600"
+                        className="text-lg sm:text-xl font-bold text-slate-900 cursor-pointer hover:text-blue-600"
                       >
                         {group.name}
                       </h3>
@@ -1117,34 +1125,34 @@ export default function App() {
                           await axios.delete(`${API}/groups/${group.id}`, authHeaders);
                           fetchData();
                         }}
-                        className="text-slate-400 hover:text-rose-600"
+                        className="text-slate-400 hover:text-rose-600 p-1"
                       >
                         <Trash2 size={18} />
                       </button>
                     </div>
 
-                    <p className="text-emerald-600 font-bold text-lg mt-1">
+                    <p className="text-emerald-600 font-bold text-base sm:text-lg mt-1">
                       {Number(group.price).toLocaleString()} so'm / oy
                     </p>
 
                     {group.isAttendanceMissing && (
                       <div className="mt-2 bg-rose-100 text-rose-700 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-semibold">
-                        <AlertTriangle size={14} /> O'qituvchi bugun davomat qilmagan!
+                        <AlertTriangle size={14} className="shrink-0" /> O'qituvchi bugun davomat qilmagan!
                       </div>
                     )}
 
                     <div className="mt-4 space-y-2 text-sm text-slate-700">
                       <p className="flex items-center gap-2">
-                        <UserCheck size={16} className="text-blue-600" />
-                        Asosiy o'qituvchi: <b>{group.mainTeacherName}</b>
+                        <UserCheck size={16} className="text-blue-600 shrink-0" />
+                        <span>Asosiy o'qituvchi: <b>{group.mainTeacherName}</b></span>
                       </p>
                       <p className="flex items-center gap-2">
-                        <Users size={16} className="text-emerald-600" />
-                        O'quvchilar soni: <b>{group.studentCount} ta</b>
+                        <Users size={16} className="text-emerald-600 shrink-0" />
+                        <span>O'quvchilar soni: <b>{group.studentCount} ta</b></span>
                       </p>
                       <p className="flex items-center gap-2">
-                        <Clock size={16} className="text-amber-600" />
-                        {group.lesson_days} | {group.lesson_time}
+                        <Clock size={16} className="text-amber-600 shrink-0" />
+                        <span>{group.lesson_days} | {group.lesson_time}</span>
                       </p>
                     </div>
 
@@ -1153,7 +1161,7 @@ export default function App() {
                         O'qituvchi kela olmasa boshqasini ulash:
                       </label>
                       <select
-                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-2 text-xs"
                         value={group.substitute_teacher_id || ''}
                         onChange={async (e) => {
                           await axios.put(
@@ -1188,11 +1196,11 @@ export default function App() {
 
       {/* 3-DARAJA: GURUH ICHIDAGI O'QUVCHILAR */}
       {ownerTab === 'branches' && selectedGroup && (
-        <div className="space-y-6">
-          <form onSubmit={handleEnrollStudent} className="bg-white border border-slate-200 p-4 rounded-2xl grid md:grid-cols-4 gap-3 shadow-sm">
+        <div className="space-y-5">
+          <form onSubmit={handleEnrollStudent} className="bg-white border border-slate-200 p-4 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 shadow-sm">
             <select
               required
-              className="bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
               value={enrollForm.studentId}
               onChange={e => setEnrollForm({ ...enrollForm, studentId: e.target.value })}
             >
@@ -1204,123 +1212,125 @@ export default function App() {
             <input
               type="date"
               required
-              className="bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
               value={enrollForm.paymentDueDate}
               onChange={e => setEnrollForm({ ...enrollForm, paymentDueDate: e.target.value })}
             />
             <input
               type="text"
               placeholder="Ota-ona Telegram Chat ID"
-              className="bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
               value={enrollForm.parentTelegramChatId}
               onChange={e => setEnrollForm({ ...enrollForm, parentTelegramChatId: e.target.value })}
             />
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold">
+            <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold">
               + Guruhga qo'shish
             </button>
           </form>
 
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 overflow-x-auto shadow-sm">
-            <h2 className="text-lg font-bold text-slate-900 mb-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 overflow-x-auto shadow-sm">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 mb-4">
               {selectedGroup.name} — O'quvchilar (Narxi: {Number(selectedGroup.price).toLocaleString()} so'm)
             </h2>
 
-            <table className="w-full text-left text-sm">
-              <thead className="text-slate-500 border-b border-slate-200">
-                <tr>
-                  <th className="pb-3">O'quvchi</th>
-                  <th className="pb-3">To'lov sanasi</th>
-                  <th className="pb-3">Holati</th>
-                  <th className="pb-3">To'lov qildi (Tick)</th>
-                  <th className="pb-3">Boshqa guruhga transfer</th>
-                  <th className="pb-3 text-right">Amallar</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {data.students
-                  .filter(s => s.group_id === selectedGroup.id)
-                  .map(st => (
-                    <tr key={st.id}>
-                      <td className="py-4 font-semibold text-slate-900">
-                        <div>{st.full_name}</div>
-                        <div className="text-xs text-slate-500">Login: @{st.username} | TG: {st.parent_telegram_chat_id || '-'}</div>
-                      </td>
-                      <td className="py-4">
-                        <input
-                          type="date"
-                          className="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs font-mono"
-                          value={st.payment_due_date || ''}
-                          onChange={async (e) => {
-                            await axios.put(
-                              `${API}/students/${st.id}/payment-date`,
-                              { paymentDueDate: e.target.value, isPaid: false },
-                              authHeaders
-                            );
-                            fetchData();
-                          }}
-                        />
-                      </td>
-                      <td className="py-4">{renderPaymentBadge(st.paymentStatus)}</td>
-                      <td className="py-4">
-                        <button
-                          onClick={async () => {
-                            await axios.put(`${API}/students/${st.id}/pay`, {}, authHeaders);
-                            fetchData();
-                          }}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
-                            st.is_paid
-                              ? 'bg-emerald-600 text-white border-emerald-600'
-                              : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-600 hover:text-white'
-                          }`}
-                        >
-                          <CheckCircle2 size={15} /> {st.is_paid ? "To'lov qilingan ✓" : "To'lov qildi"}
-                        </button>
-                      </td>
-                      <td className="py-4">
-                        <div className="flex items-center gap-1.5">
-                          <ArrowRightLeft size={14} className="text-slate-400" />
-                          <select
-                            className="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs"
-                            value={st.group_id || ''}
+            <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+              <table className="w-full min-w-[720px] text-left text-sm">
+                <thead className="text-slate-500 border-b border-slate-200">
+                  <tr>
+                    <th className="pb-3">O'quvchi</th>
+                    <th className="pb-3">To'lov sanasi</th>
+                    <th className="pb-3">Holati</th>
+                    <th className="pb-3">To'lov qildi (Tick)</th>
+                    <th className="pb-3">Boshqa guruhga transfer</th>
+                    <th className="pb-3 text-right">Amallar</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {data.students
+                    .filter(s => s.group_id === selectedGroup.id)
+                    .map(st => (
+                      <tr key={st.id}>
+                        <td className="py-3.5 font-semibold text-slate-900">
+                          <div>{st.full_name}</div>
+                          <div className="text-xs text-slate-500">Login: @{st.username} | TG: {st.parent_telegram_chat_id || '-'}</div>
+                        </td>
+                        <td className="py-3.5">
+                          <input
+                            type="date"
+                            className="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-mono"
+                            value={st.payment_due_date || ''}
                             onChange={async (e) => {
                               await axios.put(
-                                `${API}/students/${st.id}/transfer`,
-                                { newGroupId: e.target.value },
+                                `${API}/students/${st.id}/payment-date`,
+                                { paymentDueDate: e.target.value, isPaid: false },
                                 authHeaders
                               );
                               fetchData();
                             }}
+                          />
+                        </td>
+                        <td className="py-3.5">{renderPaymentBadge(st.paymentStatus)}</td>
+                        <td className="py-3.5">
+                          <button
+                            onClick={async () => {
+                              await axios.put(`${API}/students/${st.id}/pay`, {}, authHeaders);
+                              fetchData();
+                            }}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition whitespace-nowrap ${
+                              st.is_paid
+                                ? 'bg-emerald-600 text-white border-emerald-600'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-600 hover:text-white'
+                            }`}
                           >
-                            {data.groups.map(g => (
-                              <option key={g.id} value={g.id}>{g.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </td>
-                      <td className="py-4 text-right space-x-1">
-                        <button
-                          onClick={() => handleResetPassword(st.id)}
-                          className="text-amber-600 hover:bg-amber-50 p-1.5 rounded-lg"
-                          title="Yangi parol berish"
-                        >
-                          <KeyRound size={16} />
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (!confirm(`${st.full_name} ni o'chirasizmi?`)) return;
-                            await axios.delete(`${API}/users/${st.id}`, authHeaders);
-                            fetchData();
-                          }}
-                          className="text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg"
-                          title="O'quvchini o'chirish"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+                            <CheckCircle2 size={15} /> {st.is_paid ? "To'lov qilingan ✓" : "To'lov qildi"}
+                          </button>
+                        </td>
+                        <td className="py-3.5">
+                          <div className="flex items-center gap-1.5">
+                            <ArrowRightLeft size={14} className="text-slate-400 shrink-0" />
+                            <select
+                              className="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs"
+                              value={st.group_id || ''}
+                              onChange={async (e) => {
+                                await axios.put(
+                                  `${API}/students/${st.id}/transfer`,
+                                  { newGroupId: e.target.value },
+                                  authHeaders
+                                );
+                                fetchData();
+                              }}
+                            >
+                              {data.groups.map(g => (
+                                <option key={g.id} value={g.id}>{g.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </td>
+                        <td className="py-3.5 text-right space-x-1 whitespace-nowrap">
+                          <button
+                            onClick={() => handleResetPassword(st.id)}
+                            className="text-amber-600 hover:bg-amber-50 p-1.5 rounded-lg"
+                            title="Yangi parol berish"
+                          >
+                            <KeyRound size={16} />
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`${st.full_name} ni o'chirasizmi?`)) return;
+                              await axios.delete(`${API}/users/${st.id}`, authHeaders);
+                              fetchData();
+                            }}
+                            className="text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg"
+                            title="O'quvchini o'chirish"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
