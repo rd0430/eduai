@@ -1,5 +1,18 @@
 @import "tailwindcss";
 @import "tailwindcss";
+@import "tailwindcss";
+
+/* Barcha tugmalar va bosiladigan bo'limlarda sichqoncha ko'rsatkichi qo'lga o'zgarishi uchun */
+button,
+[role="button"],
+a,
+select {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
 
 /* ==========================================
    TELEGRAM USLUBIDAGI KUN / TUN REJIMI
