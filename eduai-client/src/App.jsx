@@ -5,7 +5,7 @@ import {
   ArrowRightLeft, UserCheck, Clock, AlertTriangle, LogOut,
   CreditCard, BellRing, ChevronRight, Moon, Sun, BookOpen,
   Wrench, KeyRound, Copy, Check, ShieldCheck, UserPlus,
-  LayoutGrid, Menu, X, Wallet, TrendingUp, AlertCircle
+  LayoutGrid, Menu, X, Wallet, TrendingUp, AlertCircle, Phone
 } from 'lucide-react';
 import StudyTools from './StudyTools.jsx';
 
@@ -50,12 +50,20 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('main');
 
   const [newOwnerForm, setNewOwnerForm] = useState({
-    fullName: '', centerName: '', existingCenterId: ''
+    accountType: 'center_owner',
+    fullName: '',
+    centerName: '',
+    existingCenterId: ''
   });
   const [coOwnerName, setCoOwnerName] = useState('');
   const [newTeacherForm, setNewTeacherForm] = useState({ fullName: '', subject: '', salaryPercent: 40 });
   const [newStudentForm, setNewStudentForm] = useState({
-    fullName: '', groupId: '', paymentDueDate: '', parentTelegramChatId: ''
+    fullName: '',
+    groupId: '',
+    paymentDueDate: '',
+    parentTelegramChatId: '',
+    phone1: '',
+    phone2: ''
   });
   const [newPaymentForm, setNewPaymentForm] = useState({
     studentId: '', amount: '', paymentMethod: 'Naqd', note: ''
@@ -205,7 +213,7 @@ export default function App() {
               <label className="block text-xs font-semibold text-slate-600 mb-1">Login (Username)</label>
               <input
                 type="text"
-                placeholder="Markaz bergan loginni kiriting"
+                placeholder="Berilgan loginni kiriting"
                 required
                 className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-blue-600"
                 value={loginForm.username}
@@ -405,7 +413,7 @@ export default function App() {
               </h2>
 
               {!myGroup ? (
-                <p className="text-sm text-slate-500">Siz hali birorta guruhga biriktirilmagansiz. O'quv markaz ma'muriyatiga murojaat qiling.</p>
+                <p className="text-sm text-slate-500">Siz hali birorta guruhga biriktirilmagansiz. O'qituvchi yoki markaz ma'muriyatiga murojaat qiling.</p>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                   <div className="bg-slate-50 border border-slate-200 p-4 sm:p-5 rounded-2xl space-y-3">
@@ -491,7 +499,7 @@ export default function App() {
   }
 
   // ==========================================
-  // 3. O'QITUVCHI PANELI
+  // 3. ODDIY O'QITUVCHI PANELI (MARKAZGA BIRIKTIRILGAN)
   // ==========================================
   if (currentUser.role === 'teacher') {
     const myTeacherProfile = data.teachers.find(t => t.id === currentUser.id);
@@ -643,17 +651,22 @@ export default function App() {
   }
 
   // ==========================================
-  // 4. ADMIN (GMAIL) & O'QUV MARKAZ EGASI PANELI
+  // 4. ADMIN (GMAIL), MARKAZ EGASI VA MUSTAQIL O'QITUVCHI (SOLO_TEACHER) PANELI
   // ==========================================
+  const isSoloTeacher = currentUser.role === 'solo_teacher';
+
   const handleCreateCenterOwner = async (e) => {
     e.preventDefault();
     try {
       const res = await axios.post(`${API}/admin/center-owners`, newOwnerForm, authHeaders);
-      setCreatedCredentials({ ...res.data, roleLabel: "O'quv markaz egasi" });
-      setNewOwnerForm({ fullName: '', centerName: '', existingCenterId: '' });
+      setCreatedCredentials({
+        ...res.data,
+        roleLabel: res.data.role === 'solo_teacher' ? "Mustaqil O'qituvchi (Repetitor)" : "O'quv markaz egasi"
+      });
+      setNewOwnerForm({ accountType: 'center_owner', fullName: '', centerName: '', existingCenterId: '' });
       fetchData();
     } catch (err) {
-      alert(err.response?.data?.error || 'Markaz egasi yaratishda xatolik yuz berdi!');
+      alert(err.response?.data?.error || 'Akkaunt yaratishda xatolik yuz berdi!');
     }
   };
 
@@ -687,7 +700,7 @@ export default function App() {
     try {
       const res = await axios.post(`${API}/owner/students`, newStudentForm, authHeaders);
       setCreatedCredentials({ ...res.data, roleLabel: "O'quvchi" });
-      setNewStudentForm({ fullName: '', groupId: '', paymentDueDate: '', parentTelegramChatId: '' });
+      setNewStudentForm({ fullName: '', groupId: '', paymentDueDate: '', parentTelegramChatId: '', phone1: '', phone2: '' });
       fetchData();
     } catch (err) {
       alert(err.response?.data?.error || "O'quvchi yaratishda xatolik yuz berdi!");
@@ -727,12 +740,20 @@ export default function App() {
 
   const handleAddGroup = async (e) => {
     e.preventDefault();
-    if (!newGroup.teacherId) {
+    if (!isSoloTeacher && !newGroup.teacherId) {
       alert("Avval 'Jamoa & O'quvchilar' bo'limidan o'qituvchi yarating va tanlang!");
       return;
     }
     try {
-      await axios.post(`${API}/groups`, { ...newGroup, branchId: selectedBranch.id }, authHeaders);
+      await axios.post(
+        `${API}/groups`,
+        {
+          ...newGroup,
+          teacherId: isSoloTeacher ? currentUser.id : newGroup.teacherId,
+          branchId: selectedBranch.id
+        },
+        authHeaders
+      );
       setNewGroup({ name: '', price: '', lessonDays: 'Dush, Chor, Jum', lessonTime: '14:00 - 16:00', teacherId: '' });
       fetchData();
     } catch (err) {
@@ -759,14 +780,27 @@ export default function App() {
     }
   };
 
+  const markAttendanceByOwner = async (groupId, studentId, status) => {
+    try {
+      await axios.post(`${API}/attendance`, { groupId, studentId, status }, authHeaders);
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Davomatni saqlashda xatolik yuz berdi!');
+    }
+  };
+
   const uniqueCenters = Array.from(
-    new Map(data.centerOwners.map(o => [o.owner_id || o.id, o])).values()
+    new Map(
+      data.centerOwners
+        .filter(o => o.role === 'center_owner')
+        .map(o => [o.owner_id || o.id, o])
+    ).values()
   );
 
   const adminNav = [
     ...(currentUser.role === 'admin'
       ? [{
-          label: `Markaz Egalari (${data.centerOwners.length})`,
+          label: `Markaz & Repetitorlar (${data.centerOwners.length})`,
           icon: ShieldCheck,
           active: ownerTab === 'owners',
           onClick: () => { setOwnerTab('owners'); setSelectedBranch(null); setSelectedGroup(null); }
@@ -779,7 +813,7 @@ export default function App() {
       onClick: () => { setOwnerTab('branches'); setSelectedBranch(null); setSelectedGroup(null); }
     },
     {
-      label: "Jamoa & O'quvchilar",
+      label: isSoloTeacher ? "O'quvchilar Login-Paroli" : "Jamoa & O'quvchilar",
       icon: UserPlus,
       active: ownerTab === 'accounts',
       onClick: () => { setOwnerTab('accounts'); setSelectedBranch(null); setSelectedGroup(null); }
@@ -790,6 +824,14 @@ export default function App() {
       active: ownerTab === 'finance',
       onClick: () => { setOwnerTab('finance'); setSelectedBranch(null); setSelectedGroup(null); }
     },
+    ...(isSoloTeacher
+      ? [{
+          label: "O'quv Jihozlari",
+          icon: Wrench,
+          active: ownerTab === 'tools',
+          onClick: () => { setOwnerTab('tools'); setSelectedBranch(null); setSelectedGroup(null); }
+        }]
+      : []),
     {
       label: "Qizil to'lovlar Bot",
       icon: BellRing,
@@ -802,13 +844,20 @@ export default function App() {
     }
   ];
 
-  const roleTitle = currentUser.role === 'admin' ? 'Super Admin (Gmail)' : "O'quv Markaz Egasi";
+  const roleTitle = currentUser.role === 'admin'
+    ? 'Super Admin (Gmail)'
+    : isSoloTeacher
+    ? "Mustaqil O'qituvchi (Repetitor)"
+    : "O'quv Markaz Egasi";
+
   const fin = data.financeSummary || {
     monthlyIncome: 0, totalIncome: 0, overdueDebt: 0, upcomingExpected: 0, totalTeachersMonthlySalary: 0
   };
 
   return renderSidebarLayout(adminNav, roleTitle, (
     <>
+      {ownerTab === 'tools' && isSoloTeacher && <StudyTools />}
+
       {ownerTab === 'branches' && (
         <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3 flex flex-wrap items-center gap-2 text-xs sm:text-sm text-slate-500 shadow-sm">
           <button
@@ -828,7 +877,7 @@ export default function App() {
           {selectedGroup && (
             <>
               <ChevronRight size={14} />
-              <span className="text-blue-600 font-bold">{selectedGroup.name} (O'quvchilar)</span>
+              <span className="text-blue-600 font-bold">{selectedGroup.name} (O'quvchilar & Davomat)</span>
             </>
           )}
         </div>
@@ -878,15 +927,17 @@ export default function App() {
               </div>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-              <div className="flex items-center justify-between text-blue-600 mb-2">
-                <span className="text-xs font-bold uppercase">O'qituvchilar maoshi (Oy)</span>
-                <Users size={18} />
+            {!isSoloTeacher && (
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                <div className="flex items-center justify-between text-blue-600 mb-2">
+                  <span className="text-xs font-bold uppercase">O'qituvchilar maoshi (Oy)</span>
+                  <Users size={18} />
+                </div>
+                <div className="text-2xl font-extrabold text-blue-600">
+                  {(fin.totalTeachersMonthlySalary || 0).toLocaleString()} <span className="text-xs font-medium text-slate-500">so'm</span>
+                </div>
               </div>
-              <div className="text-2xl font-extrabold text-blue-600">
-                {(fin.totalTeachersMonthlySalary || 0).toLocaleString()} <span className="text-xs font-medium text-slate-500">so'm</span>
-              </div>
-            </div>
+            )}
 
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
               <div className="flex items-center justify-between text-rose-600 mb-2">
@@ -909,69 +960,71 @@ export default function App() {
             </div>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm">
-            <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                O'qituvchilar oylik maoshi (Guruh tushumidan foiz asosida)
-              </h2>
-              <span className="bg-blue-50 text-blue-700 text-xs font-bold px-3 py-1.5 rounded-xl">
-                Jami oylik fondi: {(fin.totalTeachersMonthlySalary || 0).toLocaleString()} so'm
-              </span>
-            </div>
-
-            {data.teachers.length === 0 ? (
-              <p className="text-sm text-slate-500">Hozircha o'qituvchilar yo'q.</p>
-            ) : (
-              <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-                <table className="w-full min-w-[600px] text-left text-sm">
-                  <thead className="text-slate-500 border-b border-slate-200">
-                    <tr>
-                      <th className="pb-3">O'qituvchi</th>
-                      <th className="pb-3">Shu oydagi guruh tushumi</th>
-                      <th className="pb-3">Ulush foizi (%)</th>
-                      <th className="pb-3 text-right">Hisoblangan oylik maosh</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {data.teachers.map(t => (
-                      <tr key={t.id}>
-                        <td className="py-3.5 font-semibold text-slate-900">
-                          <div>{t.full_name}</div>
-                          <div className="text-xs text-slate-500">{t.subject}</div>
-                        </td>
-                        <td className="py-3.5 text-slate-700">
-                          {(t.monthlyGroupRevenue || 0).toLocaleString()} so'm
-                        </td>
-                        <td className="py-3.5">
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              className="w-20 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold"
-                              defaultValue={t.salaryPercent ?? 40}
-                              onBlur={async (e) => {
-                                await axios.put(
-                                  `${API}/owner/teachers/${t.id}/salary-percent`,
-                                  { salaryPercent: e.target.value },
-                                  authHeaders
-                                );
-                                fetchData();
-                              }}
-                            />
-                            <span className="text-xs font-bold text-slate-500">%</span>
-                          </div>
-                        </td>
-                        <td className="py-3.5 text-right font-extrabold text-emerald-600">
-                          {(t.monthlySalary || 0).toLocaleString()} so'm
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {!isSoloTeacher && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm">
+              <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                  O'qituvchilar oylik maoshi (Guruh tushumidan foiz asosida)
+                </h2>
+                <span className="bg-blue-50 text-blue-700 text-xs font-bold px-3 py-1.5 rounded-xl">
+                  Jami oylik fondi: {(fin.totalTeachersMonthlySalary || 0).toLocaleString()} so'm
+                </span>
               </div>
-            )}
-          </div>
+
+              {data.teachers.filter(t => t.role === 'teacher').length === 0 ? (
+                <p className="text-sm text-slate-500">Hozircha o'qituvchilar yo'q.</p>
+              ) : (
+                <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                  <table className="w-full min-w-[600px] text-left text-sm">
+                    <thead className="text-slate-500 border-b border-slate-200">
+                      <tr>
+                        <th className="pb-3">O'qituvchi</th>
+                        <th className="pb-3">Shu oydagi guruh tushumi</th>
+                        <th className="pb-3">Ulush foizi (%)</th>
+                        <th className="pb-3 text-right">Hisoblangan oylik maosh</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {data.teachers.filter(t => t.role === 'teacher').map(t => (
+                        <tr key={t.id}>
+                          <td className="py-3.5 font-semibold text-slate-900">
+                            <div>{t.full_name}</div>
+                            <div className="text-xs text-slate-500">{t.subject}</div>
+                          </td>
+                          <td className="py-3.5 text-slate-700">
+                            {(t.monthlyGroupRevenue || 0).toLocaleString()} so'm
+                          </td>
+                          <td className="py-3.5">
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                className="w-20 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold"
+                                defaultValue={t.salaryPercent ?? 40}
+                                onBlur={async (e) => {
+                                  await axios.put(
+                                    `${API}/owner/teachers/${t.id}/salary-percent`,
+                                    { salaryPercent: e.target.value },
+                                    authHeaders
+                                  );
+                                  fetchData();
+                                }}
+                              />
+                              <span className="text-xs font-bold text-slate-500">%</span>
+                            </div>
+                          </td>
+                          <td className="py-3.5 text-right font-extrabold text-emerald-600">
+                            {(t.monthlySalary || 0).toLocaleString()} so'm
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
           <form onSubmit={handleAddManualPayment} className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 shadow-sm">
             <select
@@ -1076,26 +1129,34 @@ export default function App() {
         </div>
       )}
 
-      {/* SUPER ADMIN (GMAIL): MARKAZ EGALARI (1 MARKAZGA 2+ OWNER) */}
+      {/* SUPER ADMIN (GMAIL): MARKAZ EGALARI VA YAKKA O'QITUVCHILAR */}
       {ownerTab === 'owners' && currentUser.role === 'admin' && (
         <div className="space-y-5">
           <form onSubmit={handleCreateCenterOwner} className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl grid grid-cols-1 md:grid-cols-4 gap-3 shadow-sm">
             <select
-              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
-              value={newOwnerForm.existingCenterId}
-              onChange={e => setNewOwnerForm({ ...newOwnerForm, existingCenterId: e.target.value })}
+              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-semibold"
+              value={newOwnerForm.accountType === 'solo_teacher' ? 'solo_teacher' : newOwnerForm.existingCenterId}
+              onChange={e => {
+                const val = e.target.value;
+                if (val === 'solo_teacher') {
+                  setNewOwnerForm({ ...newOwnerForm, accountType: 'solo_teacher', existingCenterId: '' });
+                } else {
+                  setNewOwnerForm({ ...newOwnerForm, accountType: 'center_owner', existingCenterId: val });
+                }
+              }}
             >
-              <option value="">+ Yangi o'quv markaz ochish</option>
+              <option value="">+ Yangi O'quv Markaz Egasi</option>
+              <option value="solo_teacher">+ Mustaqil O'qituvchi (Markazsiz repetitor)</option>
               {uniqueCenters.map(c => (
                 <option key={c.owner_id || c.id} value={c.owner_id || c.id}>
-                  Mavjud markazga sherik qo'shish: {c.subject}
+                  Mavjud markazga sherik: {c.subject}
                 </option>
               ))}
             </select>
 
             <input
               type="text"
-              placeholder="Owner Ism Familiyasi"
+              placeholder="Ism Familiyasi"
               required
               className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
               value={newOwnerForm.fullName}
@@ -1105,7 +1166,7 @@ export default function App() {
             {!newOwnerForm.existingCenterId ? (
               <input
                 type="text"
-                placeholder="O'quv markaz nomi"
+                placeholder={newOwnerForm.accountType === 'solo_teacher' ? 'Fani (masalan: Ingliz tili)' : "O'quv markaz nomi"}
                 required
                 className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
                 value={newOwnerForm.centerName}
@@ -1118,21 +1179,28 @@ export default function App() {
             )}
 
             <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2">
-              <Plus size={16} /> Owner Login-Parol yaratish
+              <Plus size={16} /> Login-Parol yaratish
             </button>
           </form>
 
           <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm">
-            <h2 className="text-base sm:text-lg font-bold mb-4">Ro'yxatdagi O'quv Markaz Egalari</h2>
+            <h2 className="text-base sm:text-lg font-bold mb-4">Ro'yxatdagi Markaz Egalari va Mustaqil O'qituvchilar</h2>
             {data.centerOwners.length === 0 ? (
-              <p className="text-sm text-slate-500">Hozircha o'quv markaz egalari yaratilmagan.</p>
+              <p className="text-sm text-slate-500">Hozircha akkauntlar yaratilmagan.</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {data.centerOwners.map(o => (
                   <div key={o.id} className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex justify-between items-start gap-2">
                     <div className="min-w-0">
-                      <h3 className="font-bold text-slate-900 truncate">{o.full_name}</h3>
-                      <p className="text-xs text-blue-600 font-medium truncate">Markaz: {o.subject}</p>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="font-bold text-slate-900 truncate">{o.full_name}</h3>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                          o.role === 'solo_teacher' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {o.role === 'solo_teacher' ? 'Repetitor' : 'Markaz'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-blue-600 font-medium truncate mt-0.5">{o.subject}</p>
                       <p className="text-xs font-mono text-slate-500 mt-1 truncate">Login: {o.username}</p>
                     </div>
                     <div className="flex gap-1.5 shrink-0">
@@ -1162,7 +1230,7 @@ export default function App() {
         </div>
       )}
 
-      {/* JAMOA (2+ OWNERLAR, O'QITUVCHILAR) VA O'QUVCHILAR LOGIN-PAROL YARATISH */}
+      {/* JAMOA VA O'QUVCHILAR LOGIN-PAROL YARATISH (2 TA IXTIYORIY TELEFON RAQAM BILAN) */}
       {ownerTab === 'accounts' && (
         <div className="space-y-6">
           {currentUser.role === 'center_owner' && (
@@ -1217,86 +1285,91 @@ export default function App() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-5 shadow-sm">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">1. O'qituvchiga Login, Parol va Ulush (%) berish</h2>
-              <form onSubmit={handleCreateTeacher} className="space-y-3">
-                <input
-                  type="text"
-                  placeholder="O'qituvchi Ism Familiyasi"
-                  required
-                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-                  value={newTeacherForm.fullName}
-                  onChange={e => setNewTeacherForm({ ...newTeacherForm, fullName: e.target.value })}
-                />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <div className={`grid grid-cols-1 ${isSoloTeacher ? '' : 'lg:grid-cols-2'} gap-6`}>
+            {!isSoloTeacher && (
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-5 shadow-sm">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">1. O'qituvchiga Login, Parol va Ulush (%) berish</h2>
+                <form onSubmit={handleCreateTeacher} className="space-y-3">
                   <input
                     type="text"
-                    placeholder="Fani (masalan: Matematika)"
+                    placeholder="O'qituvchi Ism Familiyasi"
                     required
                     className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-                    value={newTeacherForm.subject}
-                    onChange={e => setNewTeacherForm({ ...newTeacherForm, subject: e.target.value })}
+                    value={newTeacherForm.fullName}
+                    onChange={e => setNewTeacherForm({ ...newTeacherForm, fullName: e.target.value })}
                   />
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    placeholder="Ulush foizi (%)"
-                    required
-                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-                    value={newTeacherForm.salaryPercent}
-                    onChange={e => setNewTeacherForm({ ...newTeacherForm, salaryPercent: e.target.value })}
-                  />
-                </div>
-                <button className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-sm font-semibold">
-                  + O'qituvchi Login-Parolini yaratish
-                </button>
-              </form>
-
-              <div className="space-y-2.5 pt-2 border-t border-slate-200">
-                {data.teachers.map(t => (
-                  <div key={t.id} className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex justify-between items-start gap-2">
-                    <div className="min-w-0">
-                      <div className="font-bold text-slate-900 truncate">
-                        {t.full_name} <span className="text-xs text-emerald-600 font-semibold">({t.salaryPercent}%)</span>
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        {t.subject} | Login: <b className="text-blue-600">{t.username}</b>
-                      </div>
-                      <div className="text-xs text-slate-500 mt-1">
-                        Guruhlari:{' '}
-                        {t.assignedGroups?.length
-                          ? t.assignedGroups.map(g => `${g.name} (${g.studentCount} ta)`).join(', ')
-                          : 'Biriktirilmagan'}
-                      </div>
-                    </div>
-                    <div className="flex gap-1.5 shrink-0">
-                      <button
-                        onClick={() => handleResetPassword(t.id)}
-                        className="p-2 bg-white border border-slate-200 rounded-lg text-amber-600 hover:bg-amber-50"
-                        title="Parolni yangilash"
-                      >
-                        <KeyRound size={15} />
-                      </button>
-                      <button
-                        onClick={async () => {
-                          if (!confirm(`${t.full_name} ni o'chirasizmi?`)) return;
-                          await axios.delete(`${API}/users/${t.id}`, authHeaders);
-                          fetchData();
-                        }}
-                        className="p-2 bg-white border border-slate-200 rounded-lg text-rose-600 hover:bg-rose-50"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <input
+                      type="text"
+                      placeholder="Fani (masalan: Matematika)"
+                      required
+                      className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+                      value={newTeacherForm.subject}
+                      onChange={e => setNewTeacherForm({ ...newTeacherForm, subject: e.target.value })}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="Ulush foizi (%)"
+                      required
+                      className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+                      value={newTeacherForm.salaryPercent}
+                      onChange={e => setNewTeacherForm({ ...newTeacherForm, salaryPercent: e.target.value })}
+                    />
                   </div>
-                ))}
-              </div>
-            </div>
+                  <button className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-sm font-semibold">
+                    + O'qituvchi Login-Parolini yaratish
+                  </button>
+                </form>
 
+                <div className="space-y-2.5 pt-2 border-t border-slate-200">
+                  {data.teachers.filter(t => t.role === 'teacher').map(t => (
+                    <div key={t.id} className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex justify-between items-start gap-2">
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-900 truncate">
+                          {t.full_name} <span className="text-xs text-emerald-600 font-semibold">({t.salaryPercent}%)</span>
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {t.subject} | Login: <b className="text-blue-600">{t.username}</b>
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1">
+                          Guruhlari:{' '}
+                          {t.assignedGroups?.length
+                            ? t.assignedGroups.map(g => `${g.name} (${g.studentCount} ta)`).join(', ')
+                            : 'Biriktirilmagan'}
+                        </div>
+                      </div>
+                      <div className="flex gap-1.5 shrink-0">
+                        <button
+                          onClick={() => handleResetPassword(t.id)}
+                          className="p-2 bg-white border border-slate-200 rounded-lg text-amber-600 hover:bg-amber-50"
+                          title="Parolni yangilash"
+                        >
+                          <KeyRound size={15} />
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`${t.full_name} ni o'chirasizmi?`)) return;
+                            await axios.delete(`${API}/users/${t.id}`, authHeaders);
+                            fetchData();
+                          }}
+                          className="p-2 bg-white border border-slate-200 rounded-lg text-rose-600 hover:bg-rose-50"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* O'QUVCHI QO'SHISH FORMASI (2 TA IXTIYORIY TELEFON RAQAM BILAN) */}
             <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-5 shadow-sm">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">2. O'quvchiga Login va Parol berish</h2>
+              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                {isSoloTeacher ? "O'quvchiga Login va Parol berish" : "2. O'quvchiga Login va Parol berish"}
+              </h2>
               <form onSubmit={handleCreateStudent} className="space-y-3">
                 <input
                   type="text"
@@ -1306,6 +1379,24 @@ export default function App() {
                   value={newStudentForm.fullName}
                   onChange={e => setNewStudentForm({ ...newStudentForm, fullName: e.target.value })}
                 />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <input
+                    type="tel"
+                    placeholder="Telefon 1 (ixtiyoriy, +998...)"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm"
+                    value={newStudentForm.phone1}
+                    onChange={e => setNewStudentForm({ ...newStudentForm, phone1: e.target.value })}
+                  />
+                  <input
+                    type="tel"
+                    placeholder="Telefon 2 (ota-ona, ixtiyoriy)"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm"
+                    value={newStudentForm.phone2}
+                    onChange={e => setNewStudentForm({ ...newStudentForm, phone2: e.target.value })}
+                  />
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <select
                     className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
@@ -1324,19 +1415,21 @@ export default function App() {
                     onChange={e => setNewStudentForm({ ...newStudentForm, paymentDueDate: e.target.value })}
                   />
                 </div>
+
                 <input
                   type="text"
-                  placeholder="Ota-ona Telegram Chat ID (bot xabarlari uchun)"
+                  placeholder="Ota-ona Telegram Chat ID (ixtiyoriy)"
                   className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
                   value={newStudentForm.parentTelegramChatId}
                   onChange={e => setNewStudentForm({ ...newStudentForm, parentTelegramChatId: e.target.value })}
                 />
+
                 <button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-sm font-semibold">
                   + O'quvchi Login-Parolini yaratish
                 </button>
               </form>
 
-              <div className="space-y-2.5 pt-2 border-t border-slate-200 max-h-[420px] overflow-y-auto">
+              <div className="space-y-2.5 pt-2 border-t border-slate-200 max-h-[450px] overflow-y-auto">
                 {data.students.map(st => (
                   <div key={st.id} className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex flex-wrap justify-between items-center gap-2">
                     <div className="min-w-0">
@@ -1344,6 +1437,13 @@ export default function App() {
                       <div className="text-xs text-slate-500">
                         Guruh: <b>{st.groupName}</b> | Login: <b className="text-emerald-600">{st.username}</b>
                       </div>
+                      {(st.phone1 || st.phone2) && (
+                        <div className="text-xs text-slate-600 mt-1 flex flex-wrap items-center gap-2">
+                          <Phone size={12} className="text-blue-600" />
+                          {st.phone1 && <span>{st.phone1}</span>}
+                          {st.phone2 && <span>| {st.phone2}</span>}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       {renderPaymentBadge(st.paymentStatus)}
@@ -1373,13 +1473,13 @@ export default function App() {
         </div>
       )}
 
-      {/* 1-DARAJA: FILIALLAR */}
+      {/* 1-DARAJA: FILIALLAR (YOKI REPETITORNING XONASI / MANZILI) */}
       {ownerTab === 'branches' && !selectedBranch && (
         <div className="space-y-5">
           <form onSubmit={handleAddBranch} className="bg-white border border-slate-200 p-4 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-3 shadow-sm">
             <input
               type="text"
-              placeholder="Yangi filial nomi"
+              placeholder={isSoloTeacher ? "O'quv xona / Filial nomi" : 'Yangi filial nomi'}
               required
               className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
               value={newBranch.name}
@@ -1387,14 +1487,14 @@ export default function App() {
             />
             <input
               type="text"
-              placeholder="Filial manzili"
+              placeholder="Manzili"
               required
               className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
               value={newBranch.address}
               onChange={e => setNewBranch({ ...newBranch, address: e.target.value })}
             />
             <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2">
-              <Plus size={16} /> Filial qo'shish
+              <Plus size={16} /> {isSoloTeacher ? "Bo'lim / Filial qo'shish" : "Filial qo'shish"}
             </button>
           </form>
 
@@ -1450,7 +1550,12 @@ export default function App() {
       {/* 2-DARAJA: TANLANGAN FILIALDAGI GURUHLAR */}
       {ownerTab === 'branches' && selectedBranch && !selectedGroup && (
         <div className="space-y-5">
-          <form onSubmit={handleAddGroup} className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 shadow-sm">
+          <form
+            onSubmit={handleAddGroup}
+            className={`bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl grid grid-cols-1 sm:grid-cols-2 ${
+              isSoloTeacher ? 'lg:grid-cols-5' : 'lg:grid-cols-6'
+            } gap-3 shadow-sm`}
+          >
             <input
               type="text"
               placeholder="Guruh nomi"
@@ -1483,17 +1588,19 @@ export default function App() {
               value={newGroup.lessonTime}
               onChange={e => setNewGroup({ ...newGroup, lessonTime: e.target.value })}
             />
-            <select
-              required
-              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
-              value={newGroup.teacherId}
-              onChange={e => setNewGroup({ ...newGroup, teacherId: e.target.value })}
-            >
-              <option value="">O'qituvchi tanlang</option>
-              {data.teachers.map(t => (
-                <option key={t.id} value={t.id}>{t.full_name}</option>
-              ))}
-            </select>
+            {!isSoloTeacher && (
+              <select
+                required
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
+                value={newGroup.teacherId}
+                onChange={e => setNewGroup({ ...newGroup, teacherId: e.target.value })}
+              >
+                <option value="">O'qituvchi tanlang</option>
+                {data.teachers.map(t => (
+                  <option key={t.id} value={t.id}>{t.full_name}</option>
+                ))}
+              </select>
+            )}
             <button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-1 py-2.5">
               <Plus size={16} /> Guruh ochish
             </button>
@@ -1535,14 +1642,14 @@ export default function App() {
 
                     {group.isAttendanceMissing && (
                       <div className="mt-2 bg-rose-100 text-rose-700 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-semibold">
-                        <AlertTriangle size={14} className="shrink-0" /> O'qituvchi bugun davomat qilmagan!
+                        <AlertTriangle size={14} className="shrink-0" /> Bugun davomat olinmagan!
                       </div>
                     )}
 
                     <div className="mt-4 space-y-2 text-sm text-slate-700">
                       <p className="flex items-center gap-2">
                         <UserCheck size={16} className="text-blue-600 shrink-0" />
-                        <span>Asosiy o'qituvchi: <b>{group.mainTeacherName}</b></span>
+                        <span>O'qituvchi: <b>{group.mainTeacherName}</b></span>
                       </p>
                       <p className="flex items-center gap-2">
                         <Users size={16} className="text-emerald-600 shrink-0" />
@@ -1554,37 +1661,39 @@ export default function App() {
                       </p>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-slate-200">
-                      <label className="text-xs text-slate-500 block mb-1">
-                        O'qituvchi kela olmasa boshqasini ulash:
-                      </label>
-                      <select
-                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-2 text-xs"
-                        value={group.substitute_teacher_id || ''}
-                        onChange={async (e) => {
-                          await axios.put(
-                            `${API}/groups/${group.id}/substitute`,
-                            { substituteTeacherId: e.target.value },
-                            authHeaders
-                          );
-                          fetchData();
-                        }}
-                      >
-                        <option value="">Asosiy o'qituvchi o'tadi</option>
-                        {data.teachers
-                          .filter(t => t.id !== group.teacher_id)
-                          .map(t => (
-                            <option key={t.id} value={t.id}>{t.full_name}</option>
-                          ))}
-                      </select>
-                    </div>
+                    {!isSoloTeacher && (
+                      <div className="mt-4 pt-3 border-t border-slate-200">
+                        <label className="text-xs text-slate-500 block mb-1">
+                          O'qituvchi kela olmasa boshqasini ulash:
+                        </label>
+                        <select
+                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-2 text-xs"
+                          value={group.substitute_teacher_id || ''}
+                          onChange={async (e) => {
+                            await axios.put(
+                              `${API}/groups/${group.id}/substitute`,
+                              { substituteTeacherId: e.target.value },
+                              authHeaders
+                            );
+                            fetchData();
+                          }}
+                        >
+                          <option value="">Asosiy o'qituvchi o'tadi</option>
+                          {data.teachers
+                            .filter(t => t.id !== group.teacher_id)
+                            .map(t => (
+                              <option key={t.id} value={t.id}>{t.full_name}</option>
+                            ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
 
                   <button
                     onClick={() => setSelectedGroup(group)}
                     className="mt-5 w-full bg-slate-100 hover:bg-blue-600 text-slate-800 hover:text-white py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition"
                   >
-                    <Users size={16} /> O'quvchilar ro'yxati
+                    <Users size={16} /> O'quvchilar va Davomat
                   </button>
                 </div>
               ))}
@@ -1592,7 +1701,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 3-DARAJA: GURUH ICHIDAGI O'QUVCHILAR */}
+      {/* 3-DARAJA: GURUH ICHIDAGI O'QUVCHILAR, TELEFON RAQAMLAR VA DAVOMAT */}
       {ownerTab === 'branches' && selectedGroup && (
         <div className="space-y-5">
           <form onSubmit={handleEnrollStudent} className="bg-white border border-slate-200 p-4 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 shadow-sm">
@@ -1632,14 +1741,15 @@ export default function App() {
             </h2>
 
             <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-              <table className="w-full min-w-[720px] text-left text-sm">
+              <table className="w-full min-w-[820px] text-left text-sm">
                 <thead className="text-slate-500 border-b border-slate-200">
                   <tr>
-                    <th className="pb-3">O'quvchi</th>
+                    <th className="pb-3">O'quvchi & Telefonlar</th>
+                    <th className="pb-3">Bugungi davomat</th>
                     <th className="pb-3">To'lov sanasi</th>
                     <th className="pb-3">Holati</th>
-                    <th className="pb-3">To'lov qildi (Tick)</th>
-                    <th className="pb-3">Boshqa guruhga transfer</th>
+                    <th className="pb-3">To'lov qildi</th>
+                    <th className="pb-3">Transfer</th>
                     <th className="pb-3 text-right">Amallar</th>
                   </tr>
                 </thead>
@@ -1650,7 +1760,36 @@ export default function App() {
                       <tr key={st.id}>
                         <td className="py-3.5 font-semibold text-slate-900">
                           <div>{st.full_name}</div>
-                          <div className="text-xs text-slate-500">Login: @{st.username} | TG: {st.parent_telegram_chat_id || '-'}</div>
+                          <div className="text-xs text-slate-500">@{st.username} | TG: {st.parent_telegram_chat_id || '-'}</div>
+                          {(st.phone1 || st.phone2) && (
+                            <div className="text-xs text-blue-600 mt-0.5">
+                              {st.phone1} {st.phone2 ? `| ${st.phone2}` : ''}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3.5 space-x-1.5 whitespace-nowrap">
+                          <button
+                            onClick={() => markAttendanceByOwner(selectedGroup.id, st.id, true)}
+                            className={`p-1.5 rounded-lg border transition ${
+                              st.todayAttendance === true
+                                ? 'bg-emerald-600 text-white border-emerald-600'
+                                : 'bg-slate-100 text-slate-500 border-slate-200 hover:border-emerald-500'
+                            }`}
+                            title="Keldi"
+                          >
+                            <CheckCircle2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => markAttendanceByOwner(selectedGroup.id, st.id, false)}
+                            className={`p-1.5 rounded-lg border transition ${
+                              st.todayAttendance === false
+                                ? 'bg-rose-600 text-white border-rose-600'
+                                : 'bg-slate-100 text-slate-500 border-slate-200 hover:border-rose-500'
+                            }`}
+                            title="Kelmadi (Telegram xabar ketadi)"
+                          >
+                            <XCircle size={16} />
+                          </button>
                         </td>
                         <td className="py-3.5">
                           <input
@@ -1680,12 +1819,12 @@ export default function App() {
                                 : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-600 hover:text-white'
                             }`}
                           >
-                            <CheckCircle2 size={15} /> {st.is_paid ? "To'lov qilingan ✓" : "To'lov qildi"}
+                            <CheckCircle2 size={15} /> {st.is_paid ? "To'langan ✓" : "To'lov qildi"}
                           </button>
                         </td>
                         <td className="py-3.5">
-                          <div className="flex items-center gap-1.5">
-                            <ArrowRightLeft size={14} className="text-slate-400 shrink-0" />
+                          <div className="flex items-center gap-1">
+                            <ArrowRightLeft size={13} className="text-slate-400 shrink-0" />
                             <select
                               className="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs"
                               value={st.group_id || ''}
