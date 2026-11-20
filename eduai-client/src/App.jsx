@@ -49,7 +49,10 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState('main');
 
-  const [newOwnerForm, setNewOwnerForm] = useState({ fullName: '', centerName: '' });
+  const [newOwnerForm, setNewOwnerForm] = useState({
+    fullName: '', centerName: '', existingCenterId: ''
+  });
+  const [coOwnerName, setCoOwnerName] = useState('');
   const [newTeacherForm, setNewTeacherForm] = useState({ fullName: '', subject: '', salaryPercent: 40 });
   const [newStudentForm, setNewStudentForm] = useState({
     fullName: '', groupId: '', paymentDueDate: '', parentTelegramChatId: ''
@@ -488,7 +491,7 @@ export default function App() {
   }
 
   // ==========================================
-  // 3. O'QITUVCHI PANELI (DAVOMAT + O'Z OYLIK MAOSHI)
+  // 3. O'QITUVCHI PANELI
   // ==========================================
   if (currentUser.role === 'teacher') {
     const myTeacherProfile = data.teachers.find(t => t.id === currentUser.id);
@@ -526,7 +529,6 @@ export default function App() {
           <StudyTools />
         ) : (
           <>
-            {/* O'qituvchining foizli oylik maoshi kartasi */}
             {myTeacherProfile && (
               <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-3 gap-4 shadow-sm">
                 <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl">
@@ -648,10 +650,23 @@ export default function App() {
     try {
       const res = await axios.post(`${API}/admin/center-owners`, newOwnerForm, authHeaders);
       setCreatedCredentials({ ...res.data, roleLabel: "O'quv markaz egasi" });
-      setNewOwnerForm({ fullName: '', centerName: '' });
+      setNewOwnerForm({ fullName: '', centerName: '', existingCenterId: '' });
       fetchData();
     } catch (err) {
       alert(err.response?.data?.error || 'Markaz egasi yaratishda xatolik yuz berdi!');
+    }
+  };
+
+  const handleCreateCoOwner = async (e) => {
+    e.preventDefault();
+    if (!coOwnerName.trim()) return;
+    try {
+      const res = await axios.post(`${API}/owner/co-owners`, { fullName: coOwnerName }, authHeaders);
+      setCreatedCredentials({ ...res.data, roleLabel: "Qo'shimcha Markaz Egasi (Sherik)" });
+      setCoOwnerName('');
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Sherik owner yaratishda xatolik yuz berdi!');
     }
   };
 
@@ -713,7 +728,7 @@ export default function App() {
   const handleAddGroup = async (e) => {
     e.preventDefault();
     if (!newGroup.teacherId) {
-      alert("Avval 'O'qituvchi & O'quvchilar' bo'limidan o'qituvchi yarating va tanlang!");
+      alert("Avval 'Jamoa & O'quvchilar' bo'limidan o'qituvchi yarating va tanlang!");
       return;
     }
     try {
@@ -744,6 +759,10 @@ export default function App() {
     }
   };
 
+  const uniqueCenters = Array.from(
+    new Map(data.centerOwners.map(o => [o.owner_id || o.id, o])).values()
+  );
+
   const adminNav = [
     ...(currentUser.role === 'admin'
       ? [{
@@ -760,7 +779,7 @@ export default function App() {
       onClick: () => { setOwnerTab('branches'); setSelectedBranch(null); setSelectedGroup(null); }
     },
     {
-      label: "O'qituvchi & O'quvchilar",
+      label: "Jamoa & O'quvchilar",
       icon: UserPlus,
       active: ownerTab === 'accounts',
       onClick: () => { setOwnerTab('accounts'); setSelectedBranch(null); setSelectedGroup(null); }
@@ -845,7 +864,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MARKAZ ICHKI MOLIYASI (KASSA, QARZDORLIK VA O'QITUVCHILAR MAOSHI) */}
+      {/* MARKAZ ICHKI MOLIYASI */}
       {ownerTab === 'finance' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -890,7 +909,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* O'qituvchilar oylik maoshi jadvali (Foiz asosida) */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm">
             <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
               <h2 className="text-base sm:text-lg font-bold text-slate-900">
@@ -955,7 +973,6 @@ export default function App() {
             )}
           </div>
 
-          {/* Kassaga qo'lda kirim qo'shish */}
           <form onSubmit={handleAddManualPayment} className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 shadow-sm">
             <select
               required
@@ -1004,7 +1021,6 @@ export default function App() {
             </button>
           </form>
 
-          {/* To'lovlar tarixi jadvali */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm">
             <h2 className="text-base sm:text-lg font-bold text-slate-900 mb-4">Kassa kirimlar tarixi</h2>
             {data.payments.length === 0 ? (
@@ -1060,28 +1076,49 @@ export default function App() {
         </div>
       )}
 
-      {/* SUPER ADMIN (GMAIL): MARKAZ EGALARI */}
+      {/* SUPER ADMIN (GMAIL): MARKAZ EGALARI (1 MARKAZGA 2+ OWNER) */}
       {ownerTab === 'owners' && currentUser.role === 'admin' && (
         <div className="space-y-5">
-          <form onSubmit={handleCreateCenterOwner} className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-3 shadow-sm">
+          <form onSubmit={handleCreateCenterOwner} className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl grid grid-cols-1 md:grid-cols-4 gap-3 shadow-sm">
+            <select
+              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
+              value={newOwnerForm.existingCenterId}
+              onChange={e => setNewOwnerForm({ ...newOwnerForm, existingCenterId: e.target.value })}
+            >
+              <option value="">+ Yangi o'quv markaz ochish</option>
+              {uniqueCenters.map(c => (
+                <option key={c.owner_id || c.id} value={c.owner_id || c.id}>
+                  Mavjud markazga sherik qo'shish: {c.subject}
+                </option>
+              ))}
+            </select>
+
             <input
               type="text"
-              placeholder="O'quv markaz egasining Ism Familiyasi"
+              placeholder="Owner Ism Familiyasi"
               required
               className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
               value={newOwnerForm.fullName}
               onChange={e => setNewOwnerForm({ ...newOwnerForm, fullName: e.target.value })}
             />
-            <input
-              type="text"
-              placeholder="O'quv markaz nomi"
-              required
-              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-              value={newOwnerForm.centerName}
-              onChange={e => setNewOwnerForm({ ...newOwnerForm, centerName: e.target.value })}
-            />
+
+            {!newOwnerForm.existingCenterId ? (
+              <input
+                type="text"
+                placeholder="O'quv markaz nomi"
+                required
+                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+                value={newOwnerForm.centerName}
+                onChange={e => setNewOwnerForm({ ...newOwnerForm, centerName: e.target.value })}
+              />
+            ) : (
+              <div className="flex items-center px-3 py-2.5 bg-blue-50 text-blue-700 rounded-xl text-xs font-semibold">
+                Tanlangan markazga sherik sifatida ulanadi
+              </div>
+            )}
+
             <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2">
-              <Plus size={16} /> Center Owner Login-Parol yaratish
+              <Plus size={16} /> Owner Login-Parol yaratish
             </button>
           </form>
 
@@ -1095,7 +1132,7 @@ export default function App() {
                   <div key={o.id} className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex justify-between items-start gap-2">
                     <div className="min-w-0">
                       <h3 className="font-bold text-slate-900 truncate">{o.full_name}</h3>
-                      <p className="text-xs text-blue-600 font-medium truncate">{o.subject}</p>
+                      <p className="text-xs text-blue-600 font-medium truncate">Markaz: {o.subject}</p>
                       <p className="text-xs font-mono text-slate-500 mt-1 truncate">Login: {o.username}</p>
                     </div>
                     <div className="flex gap-1.5 shrink-0">
@@ -1125,158 +1162,212 @@ export default function App() {
         </div>
       )}
 
-      {/* O'QITUVCHI VA O'QUVCHILAR LOGIN-PAROL YARATISH */}
+      {/* JAMOA (2+ OWNERLAR, O'QITUVCHILAR) VA O'QUVCHILAR LOGIN-PAROL YARATISH */}
       {ownerTab === 'accounts' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-5 shadow-sm">
-            <h2 className="text-base sm:text-lg font-bold text-slate-900">1. O'qituvchiga Login, Parol va Ulush (%) berish</h2>
-            <form onSubmit={handleCreateTeacher} className="space-y-3">
-              <input
-                type="text"
-                placeholder="O'qituvchi Ism Familiyasi"
-                required
-                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-                value={newTeacherForm.fullName}
-                onChange={e => setNewTeacherForm({ ...newTeacherForm, fullName: e.target.value })}
-              />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        <div className="space-y-6">
+          {currentUser.role === 'center_owner' && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Markaz Egalari (Hammuassislar / Sheriklar)</h2>
+                  <p className="text-xs text-slate-500">O'quv markazingizni birgalikda boshqarish uchun 2-chi yoki 3-chi owner qo'shing</p>
+                </div>
+                <form onSubmit={handleCreateCoOwner} className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    placeholder="Yangi sherik Ism Familiyasi"
+                    required
+                    className="bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-sm"
+                    value={coOwnerName}
+                    onChange={e => setCoOwnerName(e.target.value)}
+                  />
+                  <button className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap flex items-center justify-center gap-1.5">
+                    <Plus size={15} /> Sherik Owner qo'shish
+                  </button>
+                </form>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {data.centerOwners.map(co => (
+                  <div key={co.id} className="bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-xs flex items-center gap-2">
+                    <ShieldCheck size={14} className="text-blue-600" />
+                    <span className="font-bold text-slate-900">{co.full_name}</span>
+                    <span className="text-blue-600 font-mono">(@{co.username})</span>
+                    <button
+                      onClick={() => handleResetPassword(co.id)}
+                      className="text-amber-600 hover:underline font-semibold ml-1"
+                    >
+                      Parol
+                    </button>
+                    {co.id !== currentUser.id && (
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`${co.full_name} ni o'chirasizmi?`)) return;
+                          await axios.delete(`${API}/users/${co.id}`, authHeaders);
+                          fetchData();
+                        }}
+                        className="text-rose-600 hover:text-rose-700 ml-1"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-5 shadow-sm">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900">1. O'qituvchiga Login, Parol va Ulush (%) berish</h2>
+              <form onSubmit={handleCreateTeacher} className="space-y-3">
                 <input
                   type="text"
-                  placeholder="Fani (masalan: Matematika)"
+                  placeholder="O'qituvchi Ism Familiyasi"
                   required
                   className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-                  value={newTeacherForm.subject}
-                  onChange={e => setNewTeacherForm({ ...newTeacherForm, subject: e.target.value })}
+                  value={newTeacherForm.fullName}
+                  onChange={e => setNewTeacherForm({ ...newTeacherForm, fullName: e.target.value })}
                 />
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  placeholder="Ulush foizi (%)"
-                  required
-                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-                  value={newTeacherForm.salaryPercent}
-                  onChange={e => setNewTeacherForm({ ...newTeacherForm, salaryPercent: e.target.value })}
-                />
-              </div>
-              <button className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-sm font-semibold">
-                + O'qituvchi Login-Parolini yaratish
-              </button>
-            </form>
-
-            <div className="space-y-2.5 pt-2 border-t border-slate-200">
-              {data.teachers.map(t => (
-                <div key={t.id} className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex justify-between items-start gap-2">
-                  <div className="min-w-0">
-                    <div className="font-bold text-slate-900 truncate">
-                      {t.full_name} <span className="text-xs text-emerald-600 font-semibold">({t.salaryPercent}%)</span>
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      {t.subject} | Login: <b className="text-blue-600">{t.username}</b>
-                    </div>
-                    <div className="text-xs text-slate-500 mt-1">
-                      Guruhlari:{' '}
-                      {t.assignedGroups?.length
-                        ? t.assignedGroups.map(g => `${g.name} (${g.studentCount} ta)`).join(', ')
-                        : 'Biriktirilmagan'}
-                    </div>
-                  </div>
-                  <div className="flex gap-1.5 shrink-0">
-                    <button
-                      onClick={() => handleResetPassword(t.id)}
-                      className="p-2 bg-white border border-slate-200 rounded-lg text-amber-600 hover:bg-amber-50"
-                      title="Parolni yangilash"
-                    >
-                      <KeyRound size={15} />
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (!confirm(`${t.full_name} ni o'chirasizmi?`)) return;
-                        await axios.delete(`${API}/users/${t.id}`, authHeaders);
-                        fetchData();
-                      }}
-                      className="p-2 bg-white border border-slate-200 rounded-lg text-rose-600 hover:bg-rose-50"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <input
+                    type="text"
+                    placeholder="Fani (masalan: Matematika)"
+                    required
+                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+                    value={newTeacherForm.subject}
+                    onChange={e => setNewTeacherForm({ ...newTeacherForm, subject: e.target.value })}
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="Ulush foizi (%)"
+                    required
+                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+                    value={newTeacherForm.salaryPercent}
+                    onChange={e => setNewTeacherForm({ ...newTeacherForm, salaryPercent: e.target.value })}
+                  />
                 </div>
-              ))}
+                <button className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-sm font-semibold">
+                  + O'qituvchi Login-Parolini yaratish
+                </button>
+              </form>
+
+              <div className="space-y-2.5 pt-2 border-t border-slate-200">
+                {data.teachers.map(t => (
+                  <div key={t.id} className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex justify-between items-start gap-2">
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-900 truncate">
+                        {t.full_name} <span className="text-xs text-emerald-600 font-semibold">({t.salaryPercent}%)</span>
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        {t.subject} | Login: <b className="text-blue-600">{t.username}</b>
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1">
+                        Guruhlari:{' '}
+                        {t.assignedGroups?.length
+                          ? t.assignedGroups.map(g => `${g.name} (${g.studentCount} ta)`).join(', ')
+                          : 'Biriktirilmagan'}
+                      </div>
+                    </div>
+                    <div className="flex gap-1.5 shrink-0">
+                      <button
+                        onClick={() => handleResetPassword(t.id)}
+                        className="p-2 bg-white border border-slate-200 rounded-lg text-amber-600 hover:bg-amber-50"
+                        title="Parolni yangilash"
+                      >
+                        <KeyRound size={15} />
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`${t.full_name} ni o'chirasizmi?`)) return;
+                          await axios.delete(`${API}/users/${t.id}`, authHeaders);
+                          fetchData();
+                        }}
+                        className="p-2 bg-white border border-slate-200 rounded-lg text-rose-600 hover:bg-rose-50"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
 
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-5 shadow-sm">
-            <h2 className="text-base sm:text-lg font-bold text-slate-900">2. O'quvchiga Login va Parol berish</h2>
-            <form onSubmit={handleCreateStudent} className="space-y-3">
-              <input
-                type="text"
-                placeholder="O'quvchi Ism Familiyasi"
-                required
-                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-                value={newStudentForm.fullName}
-                onChange={e => setNewStudentForm({ ...newStudentForm, fullName: e.target.value })}
-              />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <select
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
-                  value={newStudentForm.groupId}
-                  onChange={e => setNewStudentForm({ ...newStudentForm, groupId: e.target.value })}
-                >
-                  <option value="">Guruhni tanlang (ixtiyoriy)</option>
-                  {data.groups.map(g => (
-                    <option key={g.id} value={g.id}>{g.name}</option>
-                  ))}
-                </select>
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-5 shadow-sm">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900">2. O'quvchiga Login va Parol berish</h2>
+              <form onSubmit={handleCreateStudent} className="space-y-3">
                 <input
-                  type="date"
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
-                  value={newStudentForm.paymentDueDate}
-                  onChange={e => setNewStudentForm({ ...newStudentForm, paymentDueDate: e.target.value })}
+                  type="text"
+                  placeholder="O'quvchi Ism Familiyasi"
+                  required
+                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+                  value={newStudentForm.fullName}
+                  onChange={e => setNewStudentForm({ ...newStudentForm, fullName: e.target.value })}
                 />
-              </div>
-              <input
-                type="text"
-                placeholder="Ota-ona Telegram Chat ID (bot xabarlari uchun)"
-                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-                value={newStudentForm.parentTelegramChatId}
-                onChange={e => setNewStudentForm({ ...newStudentForm, parentTelegramChatId: e.target.value })}
-              />
-              <button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-sm font-semibold">
-                + O'quvchi Login-Parolini yaratish
-              </button>
-            </form>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <select
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
+                    value={newStudentForm.groupId}
+                    onChange={e => setNewStudentForm({ ...newStudentForm, groupId: e.target.value })}
+                  >
+                    <option value="">Guruhni tanlang (ixtiyoriy)</option>
+                    {data.groups.map(g => (
+                      <option key={g.id} value={g.id}>{g.name}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="date"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm"
+                    value={newStudentForm.paymentDueDate}
+                    onChange={e => setNewStudentForm({ ...newStudentForm, paymentDueDate: e.target.value })}
+                  />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Ota-ona Telegram Chat ID (bot xabarlari uchun)"
+                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
+                  value={newStudentForm.parentTelegramChatId}
+                  onChange={e => setNewStudentForm({ ...newStudentForm, parentTelegramChatId: e.target.value })}
+                />
+                <button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-sm font-semibold">
+                  + O'quvchi Login-Parolini yaratish
+                </button>
+              </form>
 
-            <div className="space-y-2.5 pt-2 border-t border-slate-200 max-h-[420px] overflow-y-auto">
-              {data.students.map(st => (
-                <div key={st.id} className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex flex-wrap justify-between items-center gap-2">
-                  <div className="min-w-0">
-                    <div className="font-bold text-slate-900 truncate">{st.full_name}</div>
-                    <div className="text-xs text-slate-500">
-                      Guruh: <b>{st.groupName}</b> | Login: <b className="text-emerald-600">{st.username}</b>
+              <div className="space-y-2.5 pt-2 border-t border-slate-200 max-h-[420px] overflow-y-auto">
+                {data.students.map(st => (
+                  <div key={st.id} className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex flex-wrap justify-between items-center gap-2">
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-900 truncate">{st.full_name}</div>
+                      <div className="text-xs text-slate-500">
+                        Guruh: <b>{st.groupName}</b> | Login: <b className="text-emerald-600">{st.username}</b>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {renderPaymentBadge(st.paymentStatus)}
+                      <button
+                        onClick={() => handleResetPassword(st.id)}
+                        className="p-2 bg-white border border-slate-200 rounded-lg text-amber-600 hover:bg-amber-50"
+                        title="Parolni yangilash"
+                      >
+                        <KeyRound size={15} />
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`${st.full_name} ni o'chirasizmi?`)) return;
+                          await axios.delete(`${API}/users/${st.id}`, authHeaders);
+                          fetchData();
+                        }}
+                        className="p-2 bg-white border border-slate-200 rounded-lg text-rose-600 hover:bg-rose-50"
+                      >
+                        <Trash2 size={15} />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {renderPaymentBadge(st.paymentStatus)}
-                    <button
-                      onClick={() => handleResetPassword(st.id)}
-                      className="p-2 bg-white border border-slate-200 rounded-lg text-amber-600 hover:bg-amber-50"
-                      title="Parolni yangilash"
-                    >
-                      <KeyRound size={15} />
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (!confirm(`${st.full_name} ni o'chirasizmi?`)) return;
-                        await axios.delete(`${API}/users/${st.id}`, authHeaders);
-                        fetchData();
-                      }}
-                      className="p-2 bg-white border border-slate-200 rounded-lg text-rose-600 hover:bg-rose-50"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         </div>

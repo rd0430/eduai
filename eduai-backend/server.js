@@ -131,8 +131,7 @@ function getPaymentStatus(isPaid, dueDateStr) {
 
 function getTenantOwnerId(user) {
   if (!user || user.role === 'admin') return null;
-  if (user.role === 'center_owner') return user.id;
-  return user.owner_id || null;
+  return user.owner_id || user.id;
 }
 
 async function checkAndNotifyOverduePayments(filterOwnerId = null) {
@@ -321,11 +320,11 @@ app.post('/api/auth/logout', authenticate, async (req, res) => {
 });
 
 // ==========================================
-// 5. ADMIN -> CENTER OWNER YARATISH
+// 5. ADMIN VA MARKAZ EGASI -> OWNER / CO-OWNER YARATISH
 // ==========================================
 app.post('/api/admin/center-owners', authenticate, requireSuperAdmin, checkConfig, async (req, res) => {
   try {
-    const { fullName, centerName } = req.body;
+    const { fullName, centerName, existingCenterId } = req.body;
     if (!fullName?.trim()) return res.status(400).json({ error: 'Ism-familiya kiritilishi shart' });
 
     const cleanFirst = fullName.trim().split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'owner';
@@ -333,12 +332,86 @@ app.post('/api/admin/center-owners', authenticate, requireSuperAdmin, checkConfi
     const plainPassword = String(Math.floor(100000 + Math.random() * 900000));
     const passwordHash = await bcrypt.hash(plainPassword, 10);
 
+    let finalCenterName = centerName?.trim().slice(0, 100) || "O'quv markaz";
+
+    if (existingCenterId) {
+      const { data: existingOwner } = await supabase
+        .from('users')
+        .select('subject')
+        .eq('owner_id', existingCenterId)
+        .eq('role', 'center_owner')
+        .limit(1)
+        .single();
+      if (existingOwner?.subject) finalCenterName = existingOwner.subject;
+    }
+
     const { data: owner, error } = await supabase
       .from('users')
       .insert({
         role: 'center_owner',
+        owner_id: existingCenterId || null,
         full_name: fullName.trim().slice(0, 120),
-        subject: centerName?.trim().slice(0, 100) || "O'quv markaz",
+        subject: finalCenterName,
+        username,
+        password_hash: passwordHash,
+        is_active: true
+      })
+      .select('id, full_name, subject, username, owner_id')
+      .single();
+
+    if (error) throw error;
+
+    const centerId = existingCenterId || owner.id;
+    if (!existingCenterId) {
+      await supabase.from('users').update({ owner_id: centerId }).eq('id', owner.id);
+    }
+
+    res.json({
+      id: owner.id,
+      ownerId: centerId,
+      fullName: owner.full_name,
+      centerName: owner.subject,
+      username,
+      plainPassword
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/owner/co-owners', authenticate, requireAdminOrOwner, checkConfig, async (req, res) => {
+  try {
+    const { fullName, centerId } = req.body;
+    if (!fullName?.trim()) return res.status(400).json({ error: 'Sherik ism-familiyasi shart' });
+
+    const tenantOwnerId = req.user.role === 'center_owner'
+      ? getTenantOwnerId(req.user)
+      : (centerId || null);
+
+    if (!tenantOwnerId) {
+      return res.status(400).json({ error: 'O‘quv markaz ID topilmadi' });
+    }
+
+    const { data: existingOwner } = await supabase
+      .from('users')
+      .select('subject')
+      .eq('owner_id', tenantOwnerId)
+      .eq('role', 'center_owner')
+      .limit(1)
+      .single();
+
+    const cleanFirst = fullName.trim().split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'owner';
+    const username = `owner_${cleanFirst}_${Math.floor(100 + Math.random() * 900)}`;
+    const plainPassword = String(Math.floor(100000 + Math.random() * 900000));
+    const passwordHash = await bcrypt.hash(plainPassword, 10);
+
+    const { data: coOwner, error } = await supabase
+      .from('users')
+      .insert({
+        role: 'center_owner',
+        owner_id: tenantOwnerId,
+        full_name: fullName.trim().slice(0, 120),
+        subject: existingOwner?.subject || "O'quv markaz",
         username,
         password_hash: passwordHash,
         is_active: true
@@ -348,9 +421,9 @@ app.post('/api/admin/center-owners', authenticate, requireSuperAdmin, checkConfi
 
     if (error) throw error;
     res.json({
-      id: owner.id,
-      fullName: owner.full_name,
-      centerName: owner.subject,
+      id: coOwner.id,
+      fullName: coOwner.full_name,
+      centerName: coOwner.subject,
       username,
       plainPassword
     });
@@ -367,7 +440,7 @@ app.post('/api/owner/teachers', authenticate, requireAdminOrOwner, checkConfig, 
     const { fullName, subject, salaryPercent, ownerId } = req.body;
     if (!fullName?.trim()) return res.status(400).json({ error: 'O‘qituvchi ism-familiyasi shart' });
 
-    const tenantOwnerId = req.user.role === 'center_owner' ? req.user.id : (ownerId || null);
+    const tenantOwnerId = req.user.role === 'center_owner' ? getTenantOwnerId(req.user) : (ownerId || null);
     const cleanFirst = fullName.trim().split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'ustoz';
     const username = `ustoz_${cleanFirst}_${Math.floor(100 + Math.random() * 900)}`;
     const plainPassword = String(Math.floor(100000 + Math.random() * 900000));
@@ -429,7 +502,7 @@ app.post('/api/owner/students', authenticate, requireAdminOrOwner, checkConfig, 
     const { fullName, groupId, paymentDueDate, parentTelegramChatId, ownerId } = req.body;
     if (!fullName?.trim()) return res.status(400).json({ error: 'O‘quvchi ism-familiyasi shart' });
 
-    const tenantOwnerId = req.user.role === 'center_owner' ? req.user.id : (ownerId || null);
+    const tenantOwnerId = req.user.role === 'center_owner' ? getTenantOwnerId(req.user) : (ownerId || null);
     const cleanFirst = fullName.trim().split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'student';
     const username = `${cleanFirst}_${Math.floor(100 + Math.random() * 900)}`;
     const plainPassword = String(Math.floor(100000 + Math.random() * 900000));
@@ -619,7 +692,7 @@ app.post('/api/branches', authenticate, requireAdminOrOwner, checkConfig, async 
   const { name, address } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Filial nomi shart' });
 
-  const tenantOwnerId = req.user.role === 'center_owner' ? req.user.id : null;
+  const tenantOwnerId = req.user.role === 'center_owner' ? getTenantOwnerId(req.user) : null;
   const { data, error } = await supabase
     .from('branches')
     .insert({
@@ -649,7 +722,7 @@ app.post('/api/groups', authenticate, requireAdminOrOwner, checkConfig, async (r
     return res.status(400).json({ error: 'Filial, guruh nomi va o‘qituvchi tanlanishi shart' });
   }
 
-  const tenantOwnerId = req.user.role === 'center_owner' ? req.user.id : null;
+  const tenantOwnerId = req.user.role === 'center_owner' ? getTenantOwnerId(req.user) : null;
   const { data, error } = await supabase
     .from('groups')
     .insert({
